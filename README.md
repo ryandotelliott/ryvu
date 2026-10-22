@@ -45,4 +45,4 @@ The local API checks Host and Origin, requires a per-server session token, and e
 
 ## Validation
 
-There is no automated test suite. `just typecheck` checks the server and browser sources, and `just build` type-checks and builds both. See `VALIDATION.md` for earlier observed results.
+There is no automated test suite. `just typecheck` checks the server and browser sources, and `just build` type-checks and builds both.
