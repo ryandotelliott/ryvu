@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"], "types": ["node"], "strict": true,
+    "skipLibCheck": true, "rootDir": ".", "outDir": "dist", "noEmitOnError": true,
+    "jsx": "react-jsx", "baseUrl": ".", "paths": { "@/*": ["src/web/*"] }
+  },
+  "include": ["src/*.ts"]
+}

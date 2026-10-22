@@ -1,0 +1,21 @@
+{
+  "pr": "https://github.com/ryandotelliott/t3code/pull/5",
+  "baseSHA": "c769d804559bd85b2f1fe53b608107b085162282",
+  "headSHA": "59d3eed8aeaf52a20f535cb6bf481d082dea9817",
+  "model": "gpt-6-luna",
+  "generatedAt": "2026-10-07T19:22:18.535Z",
+  "files": 25,
+  "chapters": 4,
+  "references": 26,
+  "libraryScreenshot": {
+    "fileId": "file_00000000ef2481f7a321ae813ca680d9",
+    "libraryFileId": "libfile_691865f5f8b08191b04dede90d6bc25f",
+    "filename": "t3code-guide.jpg"
+  },
+  "tests": {
+    "passed": 11,
+    "failed": 0
+  },
+  "browser": "ChatGPT/Codex in-app browser",
+  "readOnlyExternalActions": true
+}

@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.data/
+.data-active-job.json
+.DS_Store
