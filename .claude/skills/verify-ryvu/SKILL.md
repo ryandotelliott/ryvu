@@ -69,6 +69,9 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 `<journey>` is a file in `journeys/`. Exit code 0 means every check passed. Every run also fails on an uncaught page error or a Content-Security-Policy violation.
 
 - Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`.
+- `scrolling`: compositor frames keep popovers attached to sticky controls while the page scrolls; the file list and folder tree scroll independently and contain scrolling at both edges. Needs a PR with enough files to overflow the sidebar.
+- `markdown-preview`: a Markdown file's Preview toggle renders its full contents, Mermaid diagrams and highlighted code in both themes. It checks returning to Diff, preserving an unsent comment, comment jumps, find and retry after a failed file request. Picks from the inbox, or set `VERIFY_MARKDOWN_PR=owner/repo/number` to a PR with Mermaid and a supported fenced code example. It adds and removes one local draft without submitting a review.
+- `markdown-rendering` (needs `VERIFY_MODE=dev`): exercises the real rendering helpers in the browser to check escaped code, Mermaid directives that attempt to enable HTML, and cleanup after an invalid diagram. It supplements the UI journey without mocking GitHub.
 - `navigation`: deep links to every view, the `/changes` alias, old `#/` links, unknown paths, in-app links and keys, back and forward.
 - `persistence`: a settings change and a pending comment survive a reload. The comment is local until Submit review, which it never clicks.
 - `security`: raw requests with a foreign Host or Origin, a cross-site fetch, no session token, no CSRF headers, or an oversized or non-JSON body. It replays the page's own server-function requests.

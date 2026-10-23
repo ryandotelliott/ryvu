@@ -1,8 +1,9 @@
-import { memo, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { FileDiff, VirtualizerContext, WorkerPoolContextProvider } from '@pierre/diffs/react';
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 import { DEFAULT_VIRTUAL_FILE_METRICS, parsePatchFiles, Virtualizer, type DiffLineAnnotation, type SelectedLineRange } from '@pierre/diffs';
-import { ChevronRight, MessageSquare } from 'lucide-react';
+import { ChevronRight, Code2, Eye, MessageSquare } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Annotation, type AnnotationData, type CommentData } from './comments';
 import { hideWhitespace, lineHeightFor, type DisplaySettings } from './display';
@@ -78,9 +79,10 @@ export function DiffProvider({ source, children }: { source: DiffSource; childre
   </WorkerPoolContextProvider>;
 }
 const fileAt = (source: DiffSource, sha: string, path: string) => readFile({ data: { repo: source.repo, sha, path } });
+const MarkdownPreview = lazy(() => import('./markdown-preview'));
 
 // Memoized with path-taking callbacks, so a change elsewhere on the page doesn't re-render every diff.
-export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, onViewed, display, reference }: { file: ChangedFile; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; reference: Reference | null }) {
+export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, onViewed, display, reference, preview, onPreview }: { file: ChangedFile; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; reference: Reference | null; preview: boolean; onPreview: (path: string, preview: boolean) => void }) {
   const review = useReview(), { name, directory } = splitPath(file.path);
   // Only open threads on lines still in the diff show on the file, so only those count.
   const commentCount = (review?.threads.filter(thread => thread.path === file.path && thread.line !== null && !thread.resolved).length ?? 0) + (review?.drafts.filter(draft => draft.path === file.path).length ?? 0);
@@ -88,10 +90,15 @@ export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, o
     <div className="file-heading">
       <button type="button" className="file-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} ${file.path}`} aria-expanded={open} onClick={() => onToggle(file.path)}><ChevronRight size={13} className="chevron" /><span className="filename">{name}</span><span className="directory">{directory}</span><FileStatus file={file} /></button>
       {commentCount > 0 && <Tip content={`${commentCount} comment ${commentCount === 1 ? 'thread' : 'threads'}`}><span className="comment-count"><MessageSquare size={12} />{commentCount}</span></Tip>}
+      {/\.(md|markdown|mdown|mkd)$/i.test(file.path) && <Tip content={preview ? 'Show diff' : 'Preview Markdown'}><Button variant="ghost" size="icon-sm" aria-label={preview ? 'Show diff' : 'Preview Markdown'} aria-pressed={preview} onClick={() => { onPreview(file.path, !preview); if (!open) onToggle(file.path); }}>{preview ? <Code2 /> : <Eye />}</Button></Tip>}
       <FileCount file={file} />
       <label className="file-reviewed"><Checkbox aria-label={`Mark ${file.path} as reviewed`} checked={viewed} onCheckedChange={checked => onViewed(file.path, Boolean(checked))} />Reviewed</label>
     </div>
-    {open && <div className="diff-card-body"><ErrorBoundary key={JSON.stringify(display)} fallback={<div className="missing">The diff renderer could not display this patch. Open the PR on GitHub to inspect this file.</div>}><Diff file={file} display={display} reference={reference} /></ErrorBoundary>{file.availability !== 'complete' && <div className="diff-caption">{file.availability === 'partial' ? 'Partial patch · GitHub omitted part of this file’s diff' : 'No patch available for this file'}</div>}</div>}
+    {open && <div className="diff-card-body">
+      <div hidden={preview}><ErrorBoundary key={JSON.stringify(display)} fallback={<div className="missing">The diff renderer could not display this patch. Open the PR on GitHub to inspect this file.</div>}><Diff file={file} display={display} reference={reference} /></ErrorBoundary></div>
+      {preview && <Suspense fallback={<div className="markdown-preview-status" role="status">Loading preview…</div>}><MarkdownPreview file={file} /></Suspense>}
+      {!preview && file.availability !== 'complete' && <div className="diff-caption">{file.availability === 'partial' ? 'Partial patch · GitHub omitted part of this file’s diff' : 'No patch available for this file'}</div>}
+    </div>}
   </article>;
 });
 

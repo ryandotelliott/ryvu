@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleX, Clock, ExternalLink, Eye, EyeOff, FileCode2, GitBranch, ListChecks, ListTree, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -81,6 +81,8 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     return { diff: unread(shown.map(file => file.path)).slice(0, initiallyOpen), guide: firstChapter ? unread(firstChapter.files).slice(0, 1) : [] };
   });
   const [filter, setFilter] = useState(''), [tree, setTree] = useState(() => readStored<unknown>(treeKey, false) === true), [current, setCurrent] = useState(0);
+  const [previewed, setPreviewed] = useState<string[]>([]);
+  const setFilePreview = useCallback((path: string, preview: boolean) => setPreviewed(previous => preview ? [...new Set([...previous, path])] : previous.filter(value => value !== path)), []);
   const [selected, setSelected] = useState<Reference | null>(null), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
   // A jump focuses one comment. Focus belongs to the comment mode it was set in, so switching modes never opens a popover on its own.
   const [focused, setFocused] = useState<{ anchor: string; mode: string } | null>(null), diffBody = useRef<HTMLDivElement>(null);
@@ -138,7 +140,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
   function pickFile(path: string) {
     setOpen(previous => ({ ...previous, [diffView]: [...new Set([...previous[diffView], path])] }));
     if (view === 'overview') void navigate(pullLink(repo, number, 'diff'));
-    if (view === 'guide') setSelected(guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path) ?? null);
+    if (view === 'guide') { setFilePreview(path, false); setSelected(guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path) ?? null); }
     if (window.matchMedia('(max-width: 900px)').matches) setTree(false);
     requestAnimationFrame(() => scrollToElement(fileAnchor(path), offset, view === 'guide'));
   }
@@ -162,6 +164,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     setToast(event === 'APPROVE' ? 'Approved on GitHub' : event === 'REQUEST_CHANGES' ? 'Changes requested on GitHub' : 'Review submitted to GitHub');
   }
   function jumpToComment(anchor: string, path: string) {
+    setFilePreview(path, false);
     setFocus(anchor);
     // Threads on lines no longer in the diff have nowhere to show in the code; they're in the Overview's activity.
     const thread = conversation.threads.find(item => `thread-${item.id}` === anchor);
@@ -171,7 +174,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     if (view !== 'diff') void navigate(pullLink(repo, number, 'diff'));
     requestAnimationFrame(() => seekComment(anchor, fileAnchor(path), topbar + toolbar + 16));
   }
-  const showDrafts = () => { const first = drafts[0]; if (first) { if (view !== 'diff') void navigate(pullLink(repo, number, 'diff')); requestAnimationFrame(() => pickFile(first.path)); } };
+  const showDrafts = () => { const first = drafts[0]; if (first) { setFilePreview(first.path, false); if (view !== 'diff') void navigate(pullLink(repo, number, 'diff')); requestAnimationFrame(() => pickFile(first.path)); } };
   const limitations = [...snapshot.warnings, ...(guide?.limitations ?? []), ...(guide?.omissions.map(o => `${o.path}: ${o.reason}`) ?? [])];
   const changedFiles = shown.filter(file => contains(filter, file.path));
   const additions = shown.reduce((sum, file) => sum + file.additions, 0), deletions = shown.reduce((sum, file) => sum + file.deletions, 0);
@@ -193,6 +196,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
   useFindHighlights(find.open ? matches : [], findIndex);
   function goToMatch(index: number) {
     const match = matches[index]; if (!match) return;
+    setFilePreview(match.path, false);
     setFind(previous => ({ ...previous, index }));
     if (!open[diffView].includes(match.path)) setOpen(previous => ({ ...previous, [diffView]: [...previous[diffView], match.path] }));
     requestAnimationFrame(() => scrollToMatch(match, offset));
@@ -213,7 +217,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   });
-  const displayMenu = <DisplayMenu display={display} onChange={setDisplay} onReset={resetDisplay} onExpand={() => setOpen(previous => ({ ...previous, [diffView]: pageFiles }))} onCollapse={() => setOpen(previous => ({ ...previous, [diffView]: [] }))} />;
+  const displayMenu = <DisplayMenu positionMethod={view === 'diff' ? 'fixed' : undefined} display={display} onChange={setDisplay} onReset={resetDisplay} onExpand={() => setOpen(previous => ({ ...previous, [diffView]: pageFiles }))} onCollapse={() => setOpen(previous => ({ ...previous, [diffView]: [] }))} />;
   const heading = <PullHeading snapshot={snapshot} color={color} />;
   return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={reviewApi}><div className={`pr-page view-${view}`}>
     <header className="pr-topbar">
@@ -242,7 +246,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
         {guide ? <>
           <nav className="section-rail" aria-label="Sections">{chapters.map((chapter, index) => <Tip key={chapter.id} content={`${index + 1}. ${chapter.title}`} delay="instant" side="right"><button type="button" className={`${index === current ? 'is-current' : ''} ${done.includes(chapter.id) ? 'is-done' : ''}`} onClick={() => goToChapter(chapter, false)} aria-label={`Section ${index + 1}: ${chapter.title}`} aria-current={index === current ? 'location' : undefined} /></Tip>)}</nav>
           <div className="chapters">{chapters.map((chapter, index) => <ChapterSection key={chapter.id} chapter={chapter} index={index} total={chapters.length} next={chapters[index + 1]} done={done.includes(chapter.id)} files={chapter.files.map(path => files.get(path)!)} onMark={checked => setFileViewed(chapter.files, checked)} onNext={goToChapter} onFile={pickFile}
-            diffs={chapter.files.map(path => <DiffCard key={path} file={files.get(path)!} open={open.guide.includes(path)} viewed={viewed.includes(path)} onToggle={toggle} onViewed={markViewed} display={display} reference={selected?.path === path ? selected : null} />)} />)}</div>
+            diffs={chapter.files.map(path => <DiffCard key={path} file={files.get(path)!} open={open.guide.includes(path)} viewed={viewed.includes(path)} onToggle={toggle} onViewed={markViewed} display={display} reference={selected?.path === path ? selected : null} preview={previewed.includes(path)} onPreview={setFilePreview} />)} />)}</div>
           <GuideEnd done={done.length} total={chapters.length} url={snapshot.identity.url} />
           {limitations.length > 0 && <details className="limitations" id="limitations" ref={limitationsRef}><summary><ChevronRight size={12} className="chevron" />Scope and limitations · {limitations.length}</summary>{limitations.map((text, i) => <p key={i}>{text}</p>)}</details>}
         </> : <AnalyzePrompt analyzing={analyzing} prior={detail.prior} onAnalyze={() => onAnalyze(false)} />}
@@ -264,7 +268,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
             <ResizeHandle className="file-tree-resize" label="Resize files sidebar" value={treeWidth} min={treeWidths.min} max={treeWidths.max} onChange={setTreeWidth} onReset={() => setTreeWidth(treeWidths.initial)} />
           </aside>}
           {tree && <div className="file-tree-scrim" onClick={() => setTree(false)} />}
-          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} reference={null} />)}</div>
+          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} reference={null} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
         </div>
       </div>}
     {find.open && view !== 'overview' && <FindBar query={find.query} onQuery={query => setFind(previous => ({ ...previous, query, index: 0 }))} count={matches.length} current={findIndex} onStep={stepMatch}
@@ -356,12 +360,12 @@ function GuideEnd({ done, total, url }: { done: number; total: number; url: stri
   </footer>;
 }
 
-function DisplayMenu({ display, onChange, onReset, onExpand, onCollapse }: { display: DisplaySettings; onChange: (patch: Partial<DisplaySettings>) => void; onReset: () => void; onExpand: () => void; onCollapse: () => void }) {
+function DisplayMenu({ display, onChange, onReset, onExpand, onCollapse, positionMethod }: { display: DisplaySettings; onChange: (patch: Partial<DisplaySettings>) => void; onReset: () => void; onExpand: () => void; onCollapse: () => void } & Pick<ComponentProps<typeof PopoverContent>, 'positionMethod'>) {
   const [open, setOpen] = useState(false), act = (action: () => void) => () => { action(); setOpen(false); };
   const toggles: [keyof DisplaySettings, string][] = [['wrap', 'Wrap long lines'], ['wordDiff', 'Highlight changed words'], ['lineNumbers', 'Line numbers']];
   return <Popover open={open} onOpenChange={setOpen}>
     <Tip content="Display settings" side="bottom"><PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Display settings" />}><SlidersHorizontal /></PopoverTrigger></Tip>
-    <PopoverContent side="bottom" align="end" sideOffset={6} className="display-popover" initialFocus={focusOnKeyboardOpen}>
+    <PopoverContent positionMethod={positionMethod} side="bottom" align="end" sideOffset={6} className="display-popover" initialFocus={focusOnKeyboardOpen}>
       <PopoverTitle className="option-label">Diff view</PopoverTitle>
       <RadioRows label="Diff view" value={display.layout} onChange={layout => onChange({ layout })} options={[{ value: 'split', label: 'Split view' }, { value: 'unified', label: 'Unified view' }]} />
       <Separator className="my-1" />

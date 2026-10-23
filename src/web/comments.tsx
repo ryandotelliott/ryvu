@@ -164,7 +164,7 @@ export function CommentsMenu({ threads, drafts, files, onJump }: { threads: Comm
   const groups = (list: MenuItem[]) => byFile(list).map(group => <section key={group.path}><h5>{group.path}</h5>{group.items.map(row)}</section>);
   return <Popover open={open} onOpenChange={setOpen}>
     <Tip content="Comments" hotkey="C" side="bottom"><PopoverTrigger render={<Button variant="ghost" size="sm" aria-label={`${items.length} comments`} />}><MessageSquare />{items.length}</PopoverTrigger></Tip>
-    <PopoverContent ref={popup} side="bottom" align="end" sideOffset={6} className="comments-menu" initialFocus={focusOnKeyboardOpen}>
+    <PopoverContent ref={popup} positionMethod="fixed" side="bottom" align="end" sideOffset={6} className="comments-menu overflow-hidden" initialFocus={focusOnKeyboardOpen}>
       <PopoverTitle className="comments-menu-title">Comments{resolved.length > 0 && <span className="comments-menu-count">{active.length} open · {resolved.length} resolved</span>}</PopoverTitle>
       <ScrollArea className="comments-menu-scroll">
         {!items.length && <p className="comments-menu-empty">No comments on this pull request’s code yet.</p>}
@@ -236,7 +236,7 @@ export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }
     <PopoverTrigger render={<Button size="sm" />}>
       Submit review{drafts.length > 0 && <span className="review-count">{drafts.length}</span>}
     </PopoverTrigger>
-    <PopoverContent side="bottom" align="end" sideOffset={6} className="w-[380px] gap-3 p-3.5" initialFocus={area}>
+    <PopoverContent positionMethod="fixed" side="bottom" align="end" sideOffset={6} className="w-[380px] gap-3 p-3.5" initialFocus={area}>
       <PopoverTitle className="text-sm font-semibold">Finish your review</PopoverTitle>
       <Textarea ref={area} value={body} onChange={e => setBody(e.target.value)} placeholder="Leave a summary (optional for approvals)" rows={4} className="min-h-20" onKeyDown={e => submitOnShortcut(e, () => void submit())} />
       <RadioGroup aria-label="Review verdict" value={event} onValueChange={value => setEvent(value as ReviewEvent)} className="gap-0.5">

@@ -26,6 +26,7 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 
 - Chapters organized around intent and behavior, with evidence highlighting and a filterable outline sidebar (press `/`) listing each section's files.
 - Display settings, remembered in this browser: unified/split layout, hidden whitespace-only changes, line wrapping, word highlights, line numbers and code size. Diffs render through `@pierre/diffs`.
+- Markdown file headers have an icon button to toggle preview. Preview reads the full file at the PR's head commit, renders Mermaid diagrams and highlights fenced code with the diff viewer's light/dark themes. Deleted files preview the base version. Raw HTML is skipped and images open as links.
 - shadcn base-nova components backed by Base UI (buttons, checkbox, menus, popovers, dialog, switch).
 - Analyzed guides and pending review comments are stored in SQLite at `.data/ryvu.db` (Node's built-in `node:sqlite`, no extra service). Guides from the earlier `.data/cache` files are imported when the server first opens the database.
 - Settings (repositories and home page preferences) are stored in `.data/settings.json`; the open-PR list is cached in memory for a minute.
@@ -37,7 +38,7 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 
 ## Boundaries
 
-The app reads metadata, description and file patches, checking base/head SHAs before and after loading. Reading a PR fetches metadata, description, file patches, review threads and conversation comments. It does not read checks, fetch surrounding code, merge, edit issues or settings, publish or deploy. Marking a chapter read affects local progress only. Evidence validation establishes that referenced lines exist, not that every model explanation is correct. Independently review the code and questions.
+The app reads metadata, description and file patches, checking base/head SHAs before and after loading. Reading a PR fetches metadata, description, file patches, review threads and conversation comments. Expanding a hunk or opening a Markdown preview fetches full file contents at the snapshot's commit. It does not merge, edit issues or GitHub settings, publish or deploy. Marking a chapter read affects local progress only. Evidence validation establishes that referenced lines exist, not that every model explanation is correct. Independently review the code and questions.
 
 Limits: 200 files / 120,000 patch characters per guide. GitHub omissions and changed-file limits are surfaced. Generation has an eight-minute timeout, output limits and subprocess-group cancellation. Temporary generation files are removed. Codex runs ephemerally in a temporary directory with read-only sandbox, no approval prompts, ignored user config/rules, disabled hooks, shell, browser, apps, agents and memory features. Its authentication still comes from the existing Codex account. Only supplied snapshot data is intended to be analyzed.
 

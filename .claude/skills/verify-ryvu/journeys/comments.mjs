@@ -12,6 +12,13 @@ export default async function (ctx) {
   await page.waitForSelector('.comments-menu');
   const items = page.locator('.comments-menu-item:visible');
   ctx.check(await items.count() >= open.length, `C opens the Comments list with ${await items.count()} entries (${open.length} open threads)`);
+  const cornersClipped = await page.locator('.comments-menu').evaluate(async popup => {
+    await Promise.all(popup.getAnimations({ subtree: true }).map(animation => animation.finished));
+    const box = popup.getBoundingClientRect();
+    return [[box.left + 1, box.top + 1], [box.right - 1, box.top + 1], [box.left + 1, box.bottom - 1], [box.right - 1, box.bottom - 1]]
+      .every(([x, y]) => !popup.contains(document.elementFromPoint(x, y)));
+  });
+  ctx.check(cornersClipped, 'the Comments list content stays inside all four rounded corners');
   await ctx.shot('comments-list');
   await items.first().click(); await page.waitForTimeout(2500);
   const focused = await page.evaluate(() => { const el = document.querySelector('.comment-fold.is-focused'); return el ? Math.round(el.getBoundingClientRect().top) : null; });

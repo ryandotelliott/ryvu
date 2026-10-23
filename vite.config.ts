@@ -34,6 +34,7 @@ function localServer(): Plugin {
 export default defineConfig({
   plugins: [tanstackStart({ spa: { enabled: true }, importProtection: { behavior: 'error', client: { specifiers: [/^node:/] } } }), react(), tailwindcss(), localServer()],
   resolve: { alias: { '@': join(src, 'web') } },
+  optimizeDeps: { include: ['react-markdown', 'remark-gfm', 'remark-frontmatter', 'rehype-slug', 'mermaid'] },
   build: { chunkSizeWarningLimit: 1800 },
   server: { host: '127.0.0.1', port: Number(process.env.WEB_PORT ?? 5173), strictPort: true }
 });

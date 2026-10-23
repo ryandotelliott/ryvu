@@ -10,12 +10,14 @@ The Diff page shows every changed file as a card with syntax-highlighted code. A
 - `sidebar-jump` scrolls to a file, landing its card at 108px, and marks it current.
 - `sticky-header` pins the current file's header 16px below the toolbar, with no code showing around it even mid-scroll.
 - `reviewed` ticks a file reviewed and updates `N/M reviewed`.
+- `markdown-preview` switches a Markdown file between its diff and the full rendered file, with Mermaid diagrams and highlighted fenced code. Deleted files preview the base version.
 
 ## How to get to it (user POV)
 
 - Open a PR and choose the `Diff` tab, or go to `/pr/<owner>/<repo>/<n>/diff`, or press `3` on a PR page.
 - Toggle the sidebar with the `Files` button or the `f` key; `/` opens it with the filter focused.
 - Choose a file row in the sidebar.
+- For Markdown files, click the `Preview Markdown` icon button in the file header. `Show diff` restores the patch; find and comment jumps return to Diff automatically.
 
 ## Driving it with Playwright
 
@@ -31,6 +33,7 @@ Preconditions:
 - **Nothing shows around the pinned header** (`journeys/sticky-header.mjs`, `VERIFY_GUIDE_PR=…` runs it on a Guide). It records compositor frames with a CDP screencast during 60 fast wheel steps. In every frame, the 16px gap is pure page background, and the header's top corners and top line hold only palette colours.
 - **Reviewed.** Click the first card's `.file-reviewed [role="checkbox"]`. The toolbar reads `1/M reviewed`.
 - **Proof.** Screenshots of the drawn diff, the sidebar, the jump and the reviewed count.
+- **Markdown preview** (`journeys/markdown-preview.mjs`). Use a real PR with Mermaid and fenced code, or `VERIFY_MARKDOWN_PR=owner/repo/number`. Compare the rendered heading, diagram labels and complete code fence with GitHub's full file. Change the system theme and assert diagrams redraw and syntax colors change. Switch back with an unsent comment, then jump to a local draft and a find match from Preview. Fail one file request and verify Retry succeeds. Never submit the draft to GitHub.
 
 ## Gotchas
 
