@@ -1,0 +1,23 @@
+export const MAX_REQUEST_BYTES = 262_144;
+
+export function refusal({ host, origin, fetchSite, port }: { host?: string; origin?: string; fetchSite?: string; port: number }): string | null {
+  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return 'Invalid localhost Host header.';
+  if ((origin && origin !== `http://${host}`) || fetchSite === 'cross-site') return 'Only same-origin local requests are allowed.';
+  return null;
+}
+
+const refuse = (status: number, error: string) => Response.json({ error }, { status, headers: { 'Cache-Control': 'no-store' } });
+
+export async function withinLimit(request: Request): Promise<Request | Response> {
+  if (!request.body) return request;
+  if (Number(request.headers.get('content-length')) > MAX_REQUEST_BYTES) return refuse(413, 'Request too large.');
+  const chunks: Uint8Array[] = [], reader = request.body.getReader();
+  let size = 0;
+  for (let next = await reader.read(); !next.done; next = await reader.read()) {
+    size += next.value.byteLength;
+    if (size > MAX_REQUEST_BYTES) { void reader.cancel(); return refuse(413, 'Request too large.'); }
+    chunks.push(next.value);
+  }
+  if (size && !request.headers.get('content-type')?.startsWith('application/json')) return refuse(415, 'Expected JSON.');
+  return new Request(request.url, { method: request.method, headers: request.headers, signal: request.signal, body: size ? Buffer.concat(chunks) : null });
+}

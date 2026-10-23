@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { BookMarked, Check, GripVertical, LoaderCircle, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { api, forgetIndex } from './api';
+import { addRepository, listPulls, saveSettings } from '../inbox.functions';
+import { forgetIndex } from './browser-state';
 import { RepoSwatch, Segmented, Switch, Tip, repoColor } from './ui';
 import type { PullPage, Settings } from '../types';
 
@@ -11,7 +12,7 @@ export function AddRepoForm({ onAdded, autoFocus }: { onAdded: (settings: Settin
   async function submit(event: FormEvent) {
     event.preventDefault(); if (!value.trim() || busy) return;
     setBusy(true); setError('');
-    try { onAdded(await api<Settings>('/api/repos', { repo: value })); setValue(''); forgetIndex(); }
+    try { onAdded(await addRepository({ data: { repo: value } })); setValue(''); forgetIndex(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not add that repository.'); }
     finally { setBusy(false); }
   }
@@ -30,12 +31,12 @@ export function AddRepoForm({ onAdded, autoFocus }: { onAdded: (settings: Settin
 export function SettingsPage({ settings, onSettings }: { settings: Settings | null; onSettings: (settings: Settings) => void }) {
   const [counts, setCounts] = useState<NonNullable<PullPage['repos']>>([]), [error, setError] = useState(''), [saved, setSaved] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null), savedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => { if (settings?.repos.length) api<PullPage>('/api/pulls').then(page => setCounts(page.repos ?? [])).catch(() => setCounts([])); }, [settings?.repos.join('|')]);
+  useEffect(() => { if (settings?.repos.length) listPulls({ data: {} }).then(page => setCounts(page.repos ?? [])).catch(() => setCounts([])); }, [settings?.repos.join('|')]);
   if (!settings) return <div className="settings"><h1>Settings</h1></div>;
   async function save(next: Settings) {
     const previous = settings!; onSettings(next); setError('');
     try {
-      onSettings(await api<Settings>('/api/settings', next)); forgetIndex();
+      onSettings(await saveSettings({ data: next })); forgetIndex();
       setSaved(true); clearTimeout(savedTimer.current); savedTimer.current = setTimeout(() => setSaved(false), 1600);
     } catch (e) { onSettings(previous); setError(e instanceof Error ? e.message : 'Settings could not be saved.'); }
   }

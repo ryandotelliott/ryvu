@@ -4,7 +4,7 @@ A personal, localhost-only reading interface inspired by Linear's Guide view. Th
 
 ## Run
 
-Node 22 or later, `pnpm`, `gh`, and the Codex CLI must be on PATH (`just` is optional; its recipes wrap the pnpm scripts). Real generation uses their existing sign-ins (`gh auth status`, `codex login status`). It does not create credentials. The selected model is `gpt-6-luna` with high reasoning.
+Node 22.12 or later, `pnpm`, `gh`, and the Codex CLI must be on PATH (`just` is optional; its recipes wrap the pnpm scripts). Real generation uses their existing sign-ins (`gh auth status`, `codex login status`). It does not create credentials. The selected model is `gpt-6-luna` with high reasoning.
 
 ```sh
 cd ~/dev/ryvu
@@ -12,9 +12,9 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` (or `just dev`) compiles the server in watch mode, restarts it on change, and runs the Vite dev server with hot reload in front of it. Open **http://127.0.0.1:5173**. Ctrl-C stops all of it, and if any one process exits the rest are stopped too. `PORT` sets the API port (default 4317) and `WEB_PORT` the dev page port (default 5173).
+`pnpm dev` (or `just dev`) runs the app on Vite with TanStack Start. Open **http://127.0.0.1:5173**, or set `WEB_PORT` for another port. One process serves the pages and the server functions. UI edits hot-reload in place, and an edit to a `src/*.functions.ts` file applies to the next call. An edit to any other server file directly in `src/` restarts the server's runtime. A running analysis stops, and an open page asks you to reload. Ctrl-C stops any running analysis and then the server.
 
-`just start` builds and serves the production bundle at **http://127.0.0.1:4317** (`PORT=4318 just start` for another port). Both servers bind only to 127.0.0.1. `just typecheck` checks both server and browser sources; `just` lists every recipe.
+`just start` builds and serves the production build at **http://127.0.0.1:4317** (`PORT=4318 just start` for another port). Both servers bind only to 127.0.0.1. Data (saved guides, drafts, settings) lives in `.data/`; `PR_GUIDE_DATA_DIR` points a server somewhere else, which is how verification runs stay isolated. `just typecheck` checks all sources; `just` lists every recipe.
 
 Add repositories in **Settings** (or on the empty home page). The home page lists their open PRs through `gh`, with tabs for review requests, your own PRs and PRs with a cached guide, plus repository, author and draft filters. Press **⌘K** (Ctrl K elsewhere) to search: type to match titles, authors and `repo#number` (titles of older PRs are searched on GitHub as you type), or paste `1234`, `#1234`, `owner/repo#1234`, or any PR link including trailing paths such as `/changes?w=1`.
 
@@ -27,7 +27,7 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 - Chapters organized around intent and behavior, with evidence highlighting and a filterable outline sidebar (press `/`) listing each section's files.
 - Display settings, remembered in this browser: unified/split layout, hidden whitespace-only changes, line wrapping, word highlights, line numbers and code size. Diffs render through `@pierre/diffs`.
 - shadcn base-nova components backed by Base UI (buttons, checkbox, menus, popovers, dialog, switch).
-- Analyzed guides and pending review comments are stored in SQLite at `.data/ryvu.db` (Node's built-in `node:sqlite`, no extra service). Guides from the earlier `.data/cache` files are imported on startup.
+- Analyzed guides and pending review comments are stored in SQLite at `.data/ryvu.db` (Node's built-in `node:sqlite`, no extra service). Guides from the earlier `.data/cache` files are imported when the server first opens the database.
 - Settings (repositories and home page preferences) are stored in `.data/settings.json`; the open-PR list is cached in memory for a minute.
 - PR descriptions and comments render a safe Markdown subset (no raw HTML).
 - Cancel an active generation; a newer request supersedes an earlier one for this browser session.
@@ -41,8 +41,8 @@ The app reads metadata, description and file patches, checking base/head SHAs be
 
 Limits: 200 files / 120,000 patch characters per guide. GitHub omissions and changed-file limits are surfaced. Generation has an eight-minute timeout, output limits and subprocess-group cancellation. Temporary generation files are removed. Codex runs ephemerally in a temporary directory with read-only sandbox, no approval prompts, ignored user config/rules, disabled hooks, shell, browser, apps, agents and memory features. Its authentication still comes from the existing Codex account. Only supplied snapshot data is intended to be analyzed.
 
-The local API checks Host and Origin, requires a per-server session token, and exposes no general-purpose command or arbitrary URL endpoint; `gh` is only called with validated repository names and PR numbers. Its browser assets are built locally, including syntax grammars.
+The server answers only requests whose Host names its own 127.0.0.1 or localhost port, and refuses another Origin and cross-site requests. Server functions also pass TanStack Start's CSRF check and carry the session token the page gets when it opens. The server refuses request bodies over 256 KB. There is no general-purpose command or arbitrary URL endpoint; `gh` is only called with validated repository names and PR numbers. Its browser assets are built locally, including syntax grammars.
 
 ## Validation
 
-There is no automated test suite. `just typecheck` checks the server and browser sources, and `just build` type-checks and builds both.
+There is no automated test suite. `just typecheck` checks all sources, and `just build` builds the app and then type-checks it. To drive the real app in a browser and capture evidence, use the `verify-ryvu` skill in `.claude/skills/verify-ryvu/` (`SKILL.md` has the launch, doctor, drive and cleanup commands).

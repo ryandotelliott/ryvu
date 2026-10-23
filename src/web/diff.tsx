@@ -1,16 +1,16 @@
-import { Component, createContext, memo, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { FileDiff, VirtualizerContext, WorkerPoolContextProvider } from '@pierre/diffs/react';
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 import { DEFAULT_VIRTUAL_FILE_METRICS, parsePatchFiles, Virtualizer, type DiffLineAnnotation, type SelectedLineRange } from '@pierre/diffs';
 import { ChevronRight, MessageSquare } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Annotation, commentAnchor, useReview, type AnnotationData, type CommentData } from './comments';
+import { Annotation, type AnnotationData, type CommentData } from './comments';
 import { hideWhitespace, lineHeightFor, type DisplaySettings } from './display';
-import { Tip } from './ui';
-import { api } from './api';
+import { commentAnchor, DiffSourceContext, fileAnchor, pageVirtualizer, splitPath, useReview } from './pull-page';
+import { ErrorBoundary, Tip } from './ui';
+import { readFile } from '../pull.functions';
 import type { ChangedFile, DraftComment, Reference, CommentThread } from '../types';
 
-export function splitPath(path: string) { const parts = path.split('/'); const name = parts.pop()!; return { name, directory: parts.length ? `${parts.join('/')}/` : '' }; }
 export function FileCount({ file }: { file: ChangedFile }) {
   return <span className="file-count"><span className="added">+{file.additions}</span>{file.deletions > 0 && <span className="removed">−{file.deletions}</span>}</span>;
 }
@@ -20,7 +20,6 @@ function FileStatus({ file }: { file: ChangedFile }) {
   if (file.status === 'renamed' && file.previousPath) return <Tip content={`Renamed from ${file.previousPath}`}><span className="file-status">Renamed</span></Tip>;
   return null;
 }
-export const fileAnchor = (path: string) => `file-${encodeURIComponent(path).replace(/%/g, '_')}`;
 
 const theme = { light: 'pierre-light', dark: 'pierre-dark' } as const;
 // Find-in-diff marks matches with the CSS Custom Highlight API; the styles must live inside the renderer's shadow root.
@@ -63,22 +62,22 @@ const unsafeCSS = separatorCSS + `::highlight(pr-find) { background-color: oklch
 const poolOptions = { workerFactory: () => new DiffsWorker(), poolSize: Math.min(4, Math.max(1, (navigator.hardwareConcurrency ?? 4) - 1)) };
 // Where the diffs come from, so unchanged lines can be fetched when a hunk is expanded.
 export type DiffSource = { repo: string; base: string; head: string };
-const DiffSourceContext = createContext<DiffSource | null>(null);
 export function DiffProvider({ source, children }: { source: DiffSource; children: ReactNode }) {
   const [virtualizer] = useState(() => { const instance = new Virtualizer(); instance.setup(document); return instance; });
+  pageVirtualizer.current = virtualizer;
   // Cleaning up forgets every connected diff for good, so only do it on a real unmount. React re-runs effects without
   // unmounting (hot reload), and that left the page with empty diffs; a re-run cancels the pending cleanup instead.
   const pendingCleanup = useRef(0);
   useEffect(() => {
     clearTimeout(pendingCleanup.current);
-    return () => { pendingCleanup.current = window.setTimeout(() => virtualizer.cleanUp()); };
+    return () => { pendingCleanup.current = window.setTimeout(() => { virtualizer.cleanUp(); if (pageVirtualizer.current === virtualizer) pageVirtualizer.current = null; }); };
   }, [virtualizer]);
   const stableSource = useMemo(() => source, [source.repo, source.base, source.head]);
   return <WorkerPoolContextProvider poolOptions={poolOptions} highlighterOptions={{ theme, lineDiffType: 'word' }}>
     <VirtualizerContext.Provider value={virtualizer}><DiffSourceContext.Provider value={stableSource}>{children}</DiffSourceContext.Provider></VirtualizerContext.Provider>
   </WorkerPoolContextProvider>;
 }
-const fileAt = (source: DiffSource, sha: string, path: string) => api<{ contents: string }>(`/api/file?repo=${encodeURIComponent(source.repo)}&sha=${sha}&path=${encodeURIComponent(path)}`).then(result => result.contents);
+const fileAt = (source: DiffSource, sha: string, path: string) => readFile({ data: { repo: source.repo, sha, path } });
 
 // Memoized with path-taking callbacks, so a change elsewhere on the page doesn't re-render every diff.
 export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, onViewed, display, reference }: { file: ChangedFile; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; reference: Reference | null }) {
@@ -92,7 +91,7 @@ export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, o
       <FileCount file={file} />
       <label className="file-reviewed"><Checkbox aria-label={`Mark ${file.path} as reviewed`} checked={viewed} onCheckedChange={checked => onViewed(file.path, Boolean(checked))} />Reviewed</label>
     </div>
-    {open && <div className="diff-card-body"><DiffBoundary key={JSON.stringify(display)}><Diff file={file} display={display} reference={reference} /></DiffBoundary>{file.availability !== 'complete' && <div className="diff-caption">{file.availability === 'partial' ? 'Partial patch · GitHub omitted part of this file’s diff' : 'No patch available for this file'}</div>}</div>}
+    {open && <div className="diff-card-body"><ErrorBoundary key={JSON.stringify(display)} fallback={<div className="missing">The diff renderer could not display this patch. Open the PR on GitHub to inspect this file.</div>}><Diff file={file} display={display} reference={reference} /></ErrorBoundary>{file.availability !== 'complete' && <div className="diff-caption">{file.availability === 'partial' ? 'Partial patch · GitHub omitted part of this file’s diff' : 'No patch available for this file'}</div>}</div>}
   </article>;
 });
 
@@ -172,8 +171,3 @@ function Diff({ file, display, reference }: { file: ChangedFile; display: Displa
   </div>;
 }
 const renderAnnotation = (annotation: DiffLineAnnotation<AnnotationData>) => annotation.metadata ? <Annotation data={annotation.metadata} /> : null;
-class DiffBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() { return { failed: true }; }
-  render() { return this.state.failed ? <div className="missing">The diff renderer could not display this patch. Open the PR on GitHub to inspect this file.</div> : this.props.children; }
-}

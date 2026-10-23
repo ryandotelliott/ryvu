@@ -6,11 +6,11 @@ default:
 install:
     pnpm install
 
-# Run the API server and Vite dev server with reload; Ctrl-C stops both
+# Run the dev server with hot reload; Ctrl-C stops running analyses, then the server
 dev:
     pnpm dev
 
-# Type-check and build the server and browser app
+# Build the app, then type-check it
 build:
     pnpm run build
 
@@ -18,6 +18,6 @@ build:
 start: build
     pnpm start
 
-# Type-check server and browser sources
+# Type-check all sources
 typecheck:
     pnpm run typecheck

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { Component, useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import { Radio } from '@base-ui/react/radio';
@@ -110,4 +110,9 @@ export function RadioRows<T extends string>({ label, value, onChange, options }:
   return <RadioGroupPrimitive aria-label={label} value={value} onValueChange={next => onChange(next as T)} className="option-group">
     {options.map(option => <Radio.Root key={option.value} value={option.value} className="option-row">{option.label}<Radio.Indicator className="option-check"><Check size={15} /></Radio.Indicator></Radio.Root>)}
   </RadioGroupPrimitive>;
+}
+export class ErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }

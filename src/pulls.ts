@@ -1,7 +1,7 @@
-import { parseReference, parseRepo, UserError } from './domain.js';
+import { fields, parseReference, parseRepo, UserError } from './domain.js';
 import type { Store } from './store.js';
 import { runCommand, type Runner } from './process.js';
-import type { GuideStatus, IndexedPull, PullPage, PullSummary, PullTab, Resolution, Settings } from './types.js';
+import type { GuideStatus, IndexedPull, PullPage, PullQuery, PullSummary, PullTab, Resolution, Settings } from './types.js';
 const FRESH_FOR = 60_000;
 type Stored = Omit<PullSummary, 'guide'> & { baseSHA: string; headSHA: string };
 // Bot apps excluded by the search query when bot PRs are hidden; any other bot is filtered from results.
@@ -10,6 +10,14 @@ const NODE = '... on PullRequest { number title url isDraft state createdAt upda
 // GraphQL names app authors without the [bot] suffix that REST uses.
 const authorLogin = (author: Record<string, any> | null | undefined) => { const login = String(author?.login ?? 'ghost'); return author?.__typename === 'Bot' && !login.endsWith('[bot]') ? `${login}[bot]` : login; };
 const CURSOR = /^(offset:\d{1,5}|[A-Za-z0-9+/=_-]{1,300})$/;
+export function pullQuery(input: unknown): PullQuery {
+  const raw = fields(input), text = (key: string) => {
+    const value = raw[key];
+    if (value === undefined || typeof value === 'string') return value;
+    throw new UserError('Invalid pull request filters.', 400);
+  };
+  return { tab: text('tab'), repo: text('repo'), author: text('author'), drafts: text('drafts'), sort: text('sort'), after: text('after'), refresh: raw.refresh === true };
+}
 // Lists open PRs for the configured repositories through the existing gh sign-in. Read-only.
 export class Inbox {
   private viewer: Promise<string> | null = null;
@@ -73,16 +81,16 @@ export class Inbox {
       .filter(pull => pull.state === 'open' && pull.guide !== null && filter(pull)).sort((a, b) => b[sort].localeCompare(a[sort]));
   }
   // One page of open PRs across the configured repositories, fetched from GitHub search with a cursor.
-  async page(settings: Settings, params: URLSearchParams): Promise<PullPage> {
+  async page(settings: Settings, query: PullQuery): Promise<PullPage> {
     if (!settings.repos.length) return { items: [], total: 0, cursor: null, counts: { all: 0, review: 0, mine: 0, guides: 0 }, repos: [], errors: [] };
-    const tab = (params.get('tab') || 'all') as PullTab, repo = params.get('repo') ?? '', author = params.get('author') ?? '', after = params.get('after');
+    const tab = (query.tab || 'all') as PullTab, repo = query.repo ?? '', author = query.author ?? '', after = query.after;
     if (!['all', 'review', 'mine', 'guides'].includes(tab)) throw new UserError('Unknown tab.', 400);
     if (repo && !settings.repos.includes(repo)) throw new UserError('That repository isn’t on your list.', 400);
     if (author && !/^[A-Za-z0-9-]{1,39}(\[bot\])?$/.test(author)) throw new UserError('Unknown author.', 400);
     if (after && !CURSOR.test(after)) throw new UserError('Invalid page cursor.', 400);
-    const drafts = params.get('drafts') ? params.get('drafts') === 'shown' : settings.showDrafts, sort = params.get('sort') === 'created' ? 'created' : 'updated';
+    const drafts = query.drafts ? query.drafts === 'shown' : settings.showDrafts, sort = query.sort === 'created' ? 'created' : 'updated';
     const key = JSON.stringify([settings, tab, repo, author, drafts, sort, after]), cached = this.pages.get(key);
-    if (cached && params.get('refresh') !== '1' && Date.now() - cached.at < FRESH_FOR / 2) return cached.value;
+    if (cached && !query.refresh && Date.now() - cached.at < FRESH_FOR / 2) return cached.value;
     const viewer = await this.login(), first = !after, repos = repo ? [repo] : settings.repos;
     const scope = (list: string[]) => this.scope(settings, list);
     const base = `${scope(repos)}${author ? ` author:${author.endsWith('[bot]') ? `app/${author.slice(0, -5)}` : author}` : ''}${drafts ? '' : ' draft:false'}`;

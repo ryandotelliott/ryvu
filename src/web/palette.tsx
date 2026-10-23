@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { BookOpen, CornerDownLeft, ExternalLink, GitPullRequest, Link2, LoaderCircle, Settings as SettingsIcon } from 'lucide-react';
 import { Command, CommandDialog, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { api, pullIndex, pullKey, remember, type KnownPull } from './api';
+import { listPullIndex, resolvePull } from '../inbox.functions';
+import { pullIndex, pullKey, remember, type KnownPull } from './browser-state';
 import { fuzzy, segments } from './fuzzy';
-import { navigate, prHref } from './routes';
+import { homeLink, pullLink, settingsLink } from './links';
 import { commandKey } from './shell';
 import { Highlighted, Kbd, PullIcon, RepoSwatch, repoColor } from './ui';
 import type { IndexedPull, Resolution, Settings } from '../types';
@@ -33,13 +35,13 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
   const [resolution, setResolution] = useState<{ query: string; result: Resolution | null; error?: string } | null>(null);
   // Title matches from GitHub for the typed words, beyond the page loaded when the palette opened.
   const [remote, setRemote] = useState<{ query: string; keys: string[] | null } | null>(null);
-  const reference = looksLikeReference(query), repos = settings?.repos ?? [], trimmed = query.trim();
+  const reference = looksLikeReference(query), repos = settings?.repos ?? [], trimmed = query.trim(), navigate = useNavigate();
   useEffect(() => { if (!open) return; setQuery(''); pullIndex().then(setPulls).catch(() => setPulls([])); }, [open]);
   useEffect(() => {
     if (!reference) { setResolution(null); return; }
     setResolution({ query: trimmed, result: null });
     const timer = setTimeout(() => {
-      api<Resolution>(`/api/resolve?q=${encodeURIComponent(trimmed)}`)
+      resolvePull({ data: { q: trimmed } })
         .then(result => { remember(result.items); setResolution(current => current?.query === trimmed ? { query: trimmed, result } : current); })
         .catch(e => setResolution(current => current?.query === trimmed ? { query: trimmed, result: null, error: e instanceof Error ? e.message : 'Lookup failed.' } : current));
     }, 140);
@@ -49,7 +51,7 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
     if (!open || reference || trimmed.length < 2) { setRemote(null); return; }
     setRemote({ query: trimmed, keys: null });
     const timer = setTimeout(() => {
-      api<IndexedPull[]>(`/api/pulls/index?q=${encodeURIComponent(trimmed)}`)
+      listPullIndex({ data: { q: trimmed } })
         .then(found => { remember(found); setPulls(current => merge(current, found)); setRemote(current => current?.query === trimmed ? { query: trimmed, keys: found.map(keyOf) } : current); })
         .catch(() => setRemote(current => current?.query === trimmed ? { query: trimmed, keys: [] } : current));
     }, 250);
@@ -58,14 +60,14 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
   const close = () => onOpenChange(false);
   const openPull = ({ repo, number }: Target, mode: 'open' | 'github' | 'guide' = 'open') => {
     close();
-    if (mode === 'github') window.open(`https://github.com/${repo}/pull/${number}`, '_blank', 'noreferrer'); else navigate(prHref(repo, number, mode === 'guide' ? 'guide' : 'overview', mode === 'guide'));
+    if (mode === 'github') window.open(`https://github.com/${repo}/pull/${number}`, '_blank', 'noreferrer'); else void navigate(pullLink(repo, number, mode === 'guide' ? 'guide' : 'overview', mode === 'guide'));
   };
   const groups = useMemo<Group[]>(() => {
     if (!trimmed) return [
       { label: 'Recently updated', items: (pulls ?? []).slice(0, 6).map(pull => ({ id: `recent:${keyOf(pull)}`, kind: 'pull' as const, pull })) },
       { label: 'Go to', items: [
-        { id: 'go:home', kind: 'action', label: 'Pull requests', icon: <GitPullRequest size={14} />, run: () => { close(); navigate('/'); } },
-        { id: 'go:settings', kind: 'action', label: 'Settings', icon: <SettingsIcon size={14} />, run: () => { close(); navigate('/settings'); } }
+        { id: 'go:home', kind: 'action', label: 'Pull requests', icon: <GitPullRequest size={14} />, run: () => { close(); void navigate(homeLink()); } },
+        { id: 'go:settings', kind: 'action', label: 'Settings', icon: <SettingsIcon size={14} />, run: () => { close(); void navigate(settingsLink); } }
       ] }
     ];
     if (reference) {

@@ -3,3 +3,6 @@ dist/
 .data/
 .data-active-job.json
 .DS_Store
+.verify/
+.claude/skills/verify-ryvu/.harness/
+.tanstack/

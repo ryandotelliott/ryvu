@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, ChevronRight, CircleAlert, CornerDownRight, FileCode2, GitPullRequest, LoaderCircle, MessageSquare, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -7,9 +7,10 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/compone
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
-import { agoLong, readStored, useNow, writeStored } from './api';
+import { agoLong, readStored, useNow, writeStored } from './browser-state';
 import { Avatar, focusOnKeyboardOpen, Kbd, Segmented, Tip } from './ui';
 import { Markdown } from './markdown';
+import { commentAnchor, useReview } from './pull-page';
 import { commandKey } from './shell';
 import type { CommentMode } from './display';
 import type { CommentThread, Conversation as ConversationData, DiffSide, DraftComment, ReviewComment, ReviewEvent } from '../types';
@@ -26,12 +27,9 @@ export type ReviewApi = {
   // How comments show in diffs, and the comment last jumped to: it is revealed when hidden, opened as an indicator, or expanded inline.
   commentMode: CommentMode; focus: string | null; setFocus: (anchor: string | null) => void;
 };
-export const ReviewContext = createContext<ReviewApi | null>(null);
-export const useReview = () => useContext(ReviewContext);
 export type CommentData = { kind: 'thread'; thread: CommentThread } | { kind: 'draft'; draft: DraftComment };
 // Indicators group every comment on one line into a single marker.
 export type AnnotationData = CommentData | { kind: 'group'; items: CommentData[] } | { kind: 'composer'; target: ComposerTarget };
-export const commentAnchor = (data: CommentData) => data.kind === 'thread' ? `thread-${data.thread.id}` : `draft-${data.draft.id}`;
 const plainText = (markdown: string) => markdown.split('\n').map(line => line.replace(/<[^>]+>|[`*_>#~]|!?\[([^\]]*)\]\([^)]*\)/g, '$1').trim()).find(Boolean) ?? '';
 function commentSummary(data: CommentData) {
   if (data.kind === 'draft') return { author: '', text: plainText(data.draft.body), count: 1, line: lineLabel(data.draft.startLine, data.draft.line), pending: true, resolved: false, outdated: false };

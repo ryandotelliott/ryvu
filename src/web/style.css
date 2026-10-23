@@ -302,17 +302,16 @@ a.pull-row:hover { background: var(--hover); border-radius: 8px; border-bottom-c
 .diff-card-body { overflow: clip; border-radius: 0 0 9px 9px; }
 /* The file you're reading keeps its header 16px below the page's sticky bars, the same gap the diff column uses. */
 .pr-page { --sticky-top: 64px; } .pr-page.view-diff { --sticky-top: 108px; }
-/* The header overlaps the card's border with a transparent one of its own, which turns visible once it sticks, so sticking doesn't shift layout. */
-.diff-card > .file-heading { position: sticky; z-index: 4; top: var(--sticky-top); margin: -1px -1px 0; border: 1px solid transparent; border-radius: 10px 10px 0 0; background: var(--surface); background-clip: padding-box; }
-.diff-card:not(.expanded) > .file-heading { margin-bottom: -1px; border-radius: 10px; }
-.diff-card.expanded > .file-heading { border-bottom-color: var(--muted); }
+/* The header overlaps the card's border. ::before draws its rounded surface and border, so the square header box can paint the page background
+   behind the corners. It looks the same in flow and stuck, so nothing has to switch when it sticks, which a fast scroll would outrun. */
+.diff-card > .file-heading { position: sticky; z-index: 4; top: var(--sticky-top); margin: -1px -1px 0; border: 1px solid transparent; background: var(--background); }
+.diff-card > .file-heading::before { content: ''; position: absolute; z-index: -1; inset: -1px; border: 1px solid var(--border); border-radius: 10px 10px 0 0; background: var(--surface); }
+.diff-card:not(.expanded) > .file-heading { margin-bottom: -1px; } .diff-card:not(.expanded) > .file-heading::before { border-radius: 10px; }
+.diff-card.expanded > .file-heading::before { border-bottom-color: var(--muted); }
 /* The 16px between the sticky bars and --sticky-top always hides, and blocks clicks on, what scrolls under it. Painted by the bar itself, so it
-   holds even mid-layout, such as while an expanded hunk shifts the scroll position and before the stuck header is marked. */
+   holds even mid-layout, such as while an expanded hunk shifts the scroll position. */
 .diff-toolbar::after, .view-guide .pr-topbar::after { content: ''; position: absolute; left: 0; right: 0; height: 16px; background: var(--background); }
 .diff-toolbar::after { top: calc(100% + 1px); } .view-guide .pr-topbar::after { top: 100%; }
-/* Stuck: show the border, and paint the page background around the header's rounded top corners. */
-.diff-card > .file-heading.is-stuck { border-color: var(--border); box-shadow: 0 -28px 0 0 var(--background); }
-/* Covers the gap above a stuck header so code doesn't show through it. */
 /* Sits over the top right of the code, below the sticky file header. */
 .find-bar { position: fixed; z-index: 40; top: calc(var(--sticky-top) + 48px); right: 28px; display: flex; align-items: center; gap: 2px; width: min(420px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); box-shadow: var(--shadow-lg); }
 .find-bar [data-slot=input-group] { flex: 1; } .find-count { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--text-3); white-space: nowrap; }

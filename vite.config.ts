@@ -1,26 +1,39 @@
-import { defineConfig } from 'vite';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { fileURLToPath } from 'node:url';
-const api = `http://127.0.0.1:${process.env.PORT ?? 4317}`;
+import { tanstackStart } from '@tanstack/react-start/plugin/vite';
+import { refusal } from './src/request-policy.ts';
+
+const root = fileURLToPath(new URL('.', import.meta.url)), src = join(root, 'src');
+process.env.PR_GUIDE_DATA_DIR ??= join(root, '.data');
+
+function localServer(): Plugin {
+  return {
+    name: 'local-server',
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const header = (name: string) => { const value = request.headers[name]; return typeof value === 'string' ? value : undefined; };
+        const reason = refusal({ host: header('host'), origin: header('origin'), fetchSite: header('sec-fetch-site'), port: request.socket.localPort ?? 0 });
+        if (!reason) return next();
+        response.writeHead(403, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: reason }));
+      });
+      // Vite closes itself on SIGTERM, but not on Ctrl-C or a terminal hangup.
+      const stop = () => void Promise.all([globalThis.ryvuRuntime?.close(), server.close()]).finally(() => process.exit());
+      process.once('SIGINT', stop); process.once('SIGHUP', stop);
+    },
+    async hotUpdate({ file, modules }) {
+      if (this.environment.name === 'ssr' && modules.length && dirname(file) === src && !file.endsWith('.functions.ts')) await globalThis.ryvuRuntime?.close();
+    },
+    closeServer: () => globalThis.ryvuRuntime?.close()
+  };
+}
+
 export default defineConfig({
-  root: 'src/web', logLevel: 'warn',
-  plugins: [react(), tailwindcss(), {
-    // Page routes are handled in the browser; without this, /settings would resolve to the settings.tsx module.
-    name: 'page-routes',
-    configureServer: server => { server.middlewares.use((request, _response, next) => {
-      if (request.headers.accept?.includes('text/html') && request.url && !request.url.startsWith('/api/') && !/\.[A-Za-z0-9]+(\?|$)/.test(request.url)) request.url = '/index.html';
-      next();
-    }); }
-  }],
-  resolve: { alias: { '@': fileURLToPath(new URL('./src/web', import.meta.url)) } },
-  build: { outDir: '../../dist/public', emptyOutDir: true, chunkSizeWarningLimit: 1800 },
-  // Dev only: forward /api to the local server. It accepts only its own origin, so same-origin
-  // requests from the dev page are rewritten to it; anything else is passed through and rejected.
-  server: {
-    host: '127.0.0.1', strictPort: true,
-    proxy: { '^/api/': { target: api, changeOrigin: true, configure: proxy => proxy.on('proxyReq', (request, incoming) => {
-      if (incoming.headers.origin === `http://${incoming.headers.host}`) request.setHeader('origin', api);
-    }) } }
-  }
+  plugins: [tanstackStart({ spa: { enabled: true }, importProtection: { behavior: 'error', client: { specifiers: [/^node:/] } } }), react(), tailwindcss(), localServer()],
+  resolve: { alias: { '@': join(src, 'web') } },
+  build: { chunkSizeWarningLimit: 1800 },
+  server: { host: '127.0.0.1', port: Number(process.env.WEB_PORT ?? 5173), strictPort: true }
 });

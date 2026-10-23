@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import type { GitStatus } from '@pierre/trees';
-import { FileCount, splitPath } from './diff';
+import { FileCount } from './diff';
 import { matchesPattern, type HiddenFiles } from './file-filters';
 import { contains } from './fuzzy';
+import { splitPath } from './pull-page';
 import { focusOnKeyboardOpen, Segmented, Switch, Tip } from './ui';
 import type { ChangedFile } from '../types';
 

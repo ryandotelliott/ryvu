@@ -14,6 +14,9 @@ export type PullSummary = { repo: string; number: number; title: string; author:
 export type IndexedPull = Pick<PullSummary, 'repo' | 'number' | 'title' | 'author'>;
 export type Settings = { repos: string[]; pageSize: 10 | 25 | 50; showDrafts: boolean; showBots: boolean };
 export type PullTab = 'all' | 'review' | 'mine' | 'guides';
+export type PullFilters = { tab?: string; repo?: string; author?: string; drafts?: string; sort?: string };
+export type PullQuery = PullFilters & { after?: string; refresh?: boolean };
+export type PullRef = { repo: string; number: number };
 // One page of the home list. Counts and per-repository totals come with the first page only.
 export type PullPage = { items: PullSummary[]; total: number; cursor: string | null; counts: Record<PullTab, number> | null; repos: { repo: string; open: number; review: number }[] | null; errors: { repo: string; message: string }[] };
 export type Resolution = { kind: 'none' | 'link' | 'number'; items: PullSummary[]; error?: string };

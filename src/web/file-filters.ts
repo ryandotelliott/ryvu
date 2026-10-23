@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { readStored, writeStored } from './api';
+import { readStored, writeStored } from './browser-state';
 
 // Glob patterns: `*` stays within a folder, `**` crosses folders, `?` is one character.
 // A pattern without a slash matches the file name in any folder, as in .gitignore.

@@ -31,4 +31,6 @@ Use `Tip` from `src/web/ui.tsx`, never the `title` attribute.
 
 ## Running
 
-`pnpm dev` serves the app with hot reload at http://127.0.0.1:5173. Port 4317 is the API server; in dev it redirects pages to 5173.
+`pnpm dev` serves the app with hot reload at http://127.0.0.1:5173. `pnpm build` then `pnpm start` serves the production build at http://127.0.0.1:4317.
+
+Routes are TanStack Start file routes in `src/routes/`. The router plugin generates `src/routeTree.gen.ts`. Commit it, but don't edit it. The browser calls the server through the named functions in `src/*.functions.ts`, and `src/runtime.server.ts` owns the database and the analysis jobs.

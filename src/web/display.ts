@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { readStored, writeStored } from './api';
+import { readStored, writeStored } from './browser-state';
 
 export type CommentMode = 'inline' | 'indicators' | 'hidden';
 export type DisplaySettings = { layout: 'unified' | 'split'; whitespace: 'show' | 'hide'; wrap: boolean; wordDiff: boolean; lineNumbers: boolean; fontSize: number; comments: CommentMode };

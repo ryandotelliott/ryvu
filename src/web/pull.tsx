@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleX, Clock, ExternalLink, Eye, EyeOff, FileCode2, GitBranch, ListChecks, ListTree, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -6,18 +7,20 @@ import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
-import { agoLong, api, progressKey, readStored, useNow, writeStored } from './api';
-import { Activity, CommentsMenu, ReviewContext, ReviewMenu, Toast, type ComposerTarget, type ReviewApi } from './comments';
-import { DiffCard, DiffProvider, FileCount, fileAnchor, splitPath } from './diff';
+import { addDraft, deleteDraft, replyToThread, submitReview as postReview, updateDraft } from '../pull.functions';
+import { agoLong, progressKey, readStored, useNow, writeStored } from './browser-state';
+import { Activity, CommentsMenu, ReviewMenu, Toast, type ComposerTarget, type ReviewApi } from './comments';
+import { DiffCard, DiffProvider, FileCount } from './diff';
 import { ChangedFileList, ChangedFileTree, FileDisplayMenu } from './file-tree';
 import { FindBar, findMatches, scrollToMatch, useFindHighlights } from './find';
 import { clampFontSize, fontSizes, useDisplay, type DisplaySettings } from './display';
 import { contains } from './fuzzy';
 import { matchesPattern, useHiddenFiles } from './file-filters';
-import { navigate, prHref, type PullViewName } from './routes';
+import { homeLink, pullLink, type PullViewName } from './links';
 import { Avatar, CheckRow, focusOnKeyboardOpen, Kbd, PullIcon, RadioRows, RepoSwatch, ResizeHandle, Tip } from './ui';
 import { inline, Markdown } from './markdown';
-import type { ChangedFile, Chapter, Conversation as ConversationData, DraftComment, PullDetail, Reference, ReviewEvent, Snapshot } from '../types';
+import { fileAnchor, ReviewContext, scrollPageBy, splitPath } from './pull-page';
+import type { ChangedFile, Chapter, PullDetail, Reference, ReviewEvent, Snapshot } from '../types';
 
 // Heights of the sticky top bar and the diff toolbar, so scrolled-to content lands below them.
 const topbar = 48, toolbar = 44, initiallyOpen = 12;
@@ -32,7 +35,7 @@ function scrollToElement(target: string | (() => Element | null), offset: number
     const element = typeof target === 'string' ? document.getElementById(target) : target();
     if (!element) { if (++frames < 30) requestAnimationFrame(align); return; }
     const box = element.getBoundingClientRect(), delta = Math.round(center ? box.top + box.height / 2 - (window.innerHeight + offset) / 2 : box.top - offset);
-    if (Math.abs(delta) > 1) { window.scrollBy(0, delta); settled = 0; } else settled++;
+    if (Math.abs(delta) > 1) { scrollPageBy(delta); settled = 0; } else settled++;
     if (settled < 3 && ++frames < 30) requestAnimationFrame(align);
   };
   align();
@@ -49,8 +52,8 @@ function seekComment(anchor: string, fileId: string, offset: number) {
     // Move every other frame so the virtualizer can draw the rows it scrolled to.
     if (card && frames % 2 === 0) {
       const box = card.getBoundingClientRect();
-      if (!started) { window.scrollBy(0, box.top - offset); started = true; }
-      else if (box.bottom > window.innerHeight) window.scrollBy(0, window.innerHeight * 0.6);
+      if (!started) { scrollPageBy(box.top - offset); started = true; }
+      else if (box.bottom > window.innerHeight) scrollPageBy(window.innerHeight * 0.6);
       else return;
     }
     requestAnimationFrame(step);
@@ -61,7 +64,7 @@ function seekComment(anchor: string, fileId: string, offset: number) {
 export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze, color }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void; color: string }) {
   const { snapshot, guide: review, conversation, drafts } = detail, guide = review?.guide ?? null;
   const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`, number = snapshot.identity.number, pullKey = `${repo.toLowerCase()}#${number}`;
-  const [display, setDisplay, resetDisplay] = useDisplay();
+  const [display, setDisplay, resetDisplay] = useDisplay(), navigate = useNavigate();
   const viewedKey = `pr-guide:viewed:${pullKey}@${snapshot.headSHA}`;
   // Files matching a hidden pattern stay out of the Diff page's list, diffs and totals.
   const hidden = useHiddenFiles(repo), patterns = hidden.enabled ? hidden.patterns : [];
@@ -100,7 +103,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
       if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], [role="dialog"]')) return;
       const index = ['1', '2', '3'].indexOf(event.key);
-      if (index !== -1) { event.preventDefault(); navigate(prHref(repo, number, views[index][0])); return; }
+      if (index !== -1) { event.preventDefault(); void navigate(pullLink(repo, number, views[index][0])); return; }
       if ((event.key === 'f' || event.key === 'F') && view === 'diff') { event.preventDefault(); setTree(value => !value); return; }
       if (event.key === '/' && view === 'diff') { event.preventDefault(); setTree(true); requestAnimationFrame(() => filterInput.current?.focus()); return; }
       if ((event.key !== 'j' && event.key !== 'k') || !items.length) return;
@@ -110,19 +113,6 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   }, [items.join('|'), view, offset]);
-  useEffect(() => {
-    // Marks the file header that is currently stuck below the bars, so it can show its border and cover the gap above it.
-    let frame = 0, stuck: Element | null = null;
-    const update = () => {
-      frame = 0;
-      const panel = document.querySelector('.diff-panel')?.getBoundingClientRect(), card = panel && document.elementFromPoint(panel.left + 24, offset + 2)?.closest('.diff-card.expanded');
-      const next = card && card.getBoundingClientRect().top < offset - 0.5 ? card.querySelector(':scope > .file-heading') : null;
-      if (next !== stuck) { stuck?.classList.remove('is-stuck'); next?.classList.add('is-stuck'); stuck = next; }
-    };
-    const onScroll = () => { frame ||= requestAnimationFrame(update); };
-    update(); window.addEventListener('scroll', onScroll, { passive: true });
-    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(frame); stuck?.classList.remove('is-stuck'); };
-  }, [view, offset]);
   useEffect(() => {
     // Tracks which section or file is being read, for the section rail and file tree.
     let frame = 0;
@@ -147,7 +137,7 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
   const toggle = useCallback((path: string) => setOpen(previous => ({ ...previous, [diffView]: previous[diffView].includes(path) ? previous[diffView].filter(value => value !== path) : [...previous[diffView], path] })), [diffView]);
   function pickFile(path: string) {
     setOpen(previous => ({ ...previous, [diffView]: [...new Set([...previous[diffView], path])] }));
-    if (view === 'overview') navigate(prHref(repo, number, 'diff'));
+    if (view === 'overview') void navigate(pullLink(repo, number, 'diff'));
     if (view === 'guide') setSelected(guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path) ?? null);
     if (window.matchMedia('(max-width: 900px)').matches) setTree(false);
     requestAnimationFrame(() => scrollToElement(fileAnchor(path), offset, view === 'guide'));
@@ -160,14 +150,14 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
   const pull = { repo, number };
   const reviewApi = useMemo<ReviewApi>(() => ({
     viewer: detail.viewer, author: snapshot.author, threads: conversation.threads, drafts, composer, setComposer,
-    addDraft: async (target, body) => { const draft = await api<DraftComment>('/api/drafts', { ...pull, headSHA: snapshot.headSHA, path: target.path, side: target.side, startLine: target.start < target.end ? target.start : null, line: target.end, body }); onDetail(d => ({ ...d, drafts: [...d.drafts, draft] })); },
-    updateDraft: async (id, body) => { const draft = await api<DraftComment>(`/api/drafts/${id}`, { body }); onDetail(d => ({ ...d, drafts: d.drafts.map(item => item.id === id ? draft : item) })); },
-    deleteDraft: async id => { await api(`/api/drafts/${id}`, undefined, 'DELETE'); onDetail(d => ({ ...d, drafts: d.drafts.filter(item => item.id !== id) })); },
-    reply: async (threadId, body) => { const next = await api<ConversationData>('/api/reply', { ...pull, commentId: threadId, body }); onDetail(d => ({ ...d, conversation: next })); setToast('Reply posted to GitHub'); },
+    addDraft: async (target, body) => { const draft = await addDraft({ data: { ...pull, headSHA: snapshot.headSHA, path: target.path, side: target.side, startLine: target.start < target.end ? target.start : null, line: target.end, body } }); onDetail(d => ({ ...d, drafts: [...d.drafts, draft] })); },
+    updateDraft: async (id, body) => { const draft = await updateDraft({ data: { id, body } }); onDetail(d => ({ ...d, drafts: d.drafts.map(item => item.id === id ? draft : item) })); },
+    deleteDraft: async id => { await deleteDraft({ data: { id } }); onDetail(d => ({ ...d, drafts: d.drafts.filter(item => item.id !== id) })); },
+    reply: async (threadId, body) => { const next = await replyToThread({ data: { ...pull, commentId: threadId, body } }); onDetail(d => ({ ...d, conversation: next })); setToast('Reply posted to GitHub'); },
     commentMode: display.comments, focus, setFocus
   }), [detail.viewer, snapshot, conversation.threads, drafts, composer, display.comments, focus, setFocus]);
   async function submitReview(event: ReviewEvent, body: string) {
-    const result = await api<{ conversation: ConversationData; drafts: DraftComment[] }>('/api/review', { ...pull, headSHA: snapshot.headSHA, event, body });
+    const result = await postReview({ data: { ...pull, headSHA: snapshot.headSHA, event, body } });
     onDetail(d => ({ ...d, conversation: result.conversation, drafts: result.drafts }));
     setToast(event === 'APPROVE' ? 'Approved on GitHub' : event === 'REQUEST_CHANGES' ? 'Changes requested on GitHub' : 'Review submitted to GitHub');
   }
@@ -175,13 +165,13 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     setFocus(anchor);
     // Threads on lines no longer in the diff have nowhere to show in the code; they're in the Overview's activity.
     const thread = conversation.threads.find(item => `thread-${item.id}` === anchor);
-    if (thread && (thread.outdated || thread.line === null)) { if (view !== 'overview') navigate(prHref(repo, number)); requestAnimationFrame(() => scrollToElement(`activity-${anchor}`, topbar + 16, true)); return; }
+    if (thread && (thread.outdated || thread.line === null)) { if (view !== 'overview') void navigate(pullLink(repo, number)); requestAnimationFrame(() => scrollToElement(`activity-${anchor}`, topbar + 16, true)); return; }
     if (!shown.some(file => file.path === path)) hidden.setEnabled(false);
     setOpen(previous => ({ ...previous, diff: [...new Set([...previous.diff, path])] }));
-    if (view !== 'diff') navigate(prHref(repo, number, 'diff'));
+    if (view !== 'diff') void navigate(pullLink(repo, number, 'diff'));
     requestAnimationFrame(() => seekComment(anchor, fileAnchor(path), topbar + toolbar + 16));
   }
-  const showDrafts = () => { const first = drafts[0]; if (first) { if (view !== 'diff') navigate(prHref(repo, number, 'diff')); requestAnimationFrame(() => pickFile(first.path)); } };
+  const showDrafts = () => { const first = drafts[0]; if (first) { if (view !== 'diff') void navigate(pullLink(repo, number, 'diff')); requestAnimationFrame(() => pickFile(first.path)); } };
   const limitations = [...snapshot.warnings, ...(guide?.limitations ?? []), ...(guide?.omissions.map(o => `${o.path}: ${o.reason}`) ?? [])];
   const changedFiles = shown.filter(file => contains(filter, file.path));
   const additions = shown.reduce((sum, file) => sum + file.additions, 0), deletions = shown.reduce((sum, file) => sum + file.deletions, 0);
@@ -227,9 +217,9 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
   const heading = <PullHeading snapshot={snapshot} color={color} />;
   return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={reviewApi}><div className={`pr-page view-${view}`}>
     <header className="pr-topbar">
-      <Tip content="Pull requests" side="bottom"><a href="/" className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} aria-label="Pull requests"><ArrowLeft /></a></Tip>
+      <Tip content="Pull requests" side="bottom"><Link {...homeLink()} className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} aria-label="Pull requests"><ArrowLeft /></Link></Tip>
       <Tip content={`${repo} #${number}: ${snapshot.title}`} delay="long" side="bottom"><span className="topbar-title"><span className="topbar-number">#{number}</span><span>{snapshot.title}</span></span></Tip>
-      <nav className="view-tabs" aria-label="View">{views.map(([name, label], i) => <Tip key={name} content={label} hotkey={String(i + 1)} delay="long" side="bottom"><a href={prHref(repo, number, name)} className={view === name ? 'is-active' : ''} aria-current={view === name ? 'page' : undefined}>{label}{name === 'guide' && analyzing && <LoaderCircle size={12} className="spinner" />}</a></Tip>)}</nav>
+      <nav className="view-tabs" aria-label="View">{views.map(([name, label], i) => <Tip key={name} content={label} hotkey={String(i + 1)} delay="long" side="bottom"><Link {...pullLink(repo, number, name)} className={view === name ? 'is-active' : ''} aria-current={view === name ? 'page' : undefined}>{label}{name === 'guide' && analyzing && <LoaderCircle size={12} className="spinner" />}</Link></Tip>)}</nav>
       <div className="topbar-actions">
         <CommentsMenu threads={conversation.threads} drafts={drafts} files={snapshot.files.map(file => file.path)} onJump={jumpToComment} />
         <ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />

@@ -45,9 +45,10 @@ function ignoredNote(ignored: readonly string[]) {
 }
 type Job = { view: JobView; abort: AbortController; clientId: string; created: number };
 export class Jobs {
-  private jobs = new Map<string, Job>(); private clients = new Map<string, { sequence: number; jobId: string }>();
+  private jobs = new Map<string, Job>(); private clients = new Map<string, { sequence: number; jobId: string }>(); private running = new Set<Promise<void>>(); private closed = false;
   constructor(private service: ReviewService) {}
   start(clientId: unknown, sequence: unknown, input: unknown, fresh: unknown = false, ignored: unknown = []): JobView {
+    if (this.closed) throw new UserError('The local server is shutting down.', 503);
     if (typeof clientId !== 'string' || !/^[a-f0-9-]{36}$/.test(clientId) || !Number.isSafeInteger(sequence) || Number(sequence) < 1 || typeof fresh !== 'boolean') throw new UserError('Invalid request identity.', 400);
     if (!Array.isArray(ignored) || ignored.length > 3000 || ignored.some(path => typeof path !== 'string' || path.length > 1000)) throw new UserError('Invalid list of ignored files.', 400);
     const previous = this.clients.get(clientId);
@@ -58,7 +59,7 @@ export class Jobs {
     if (previous) this.cancel(previous.jobId, clientId);
     const id = randomUUID(), job: Job = { view: { id, state: 'loading', message: 'Reading pull request…' }, abort: new AbortController(), clientId, created: Date.now() };
     this.jobs.set(id, job); this.clients.set(clientId, { sequence: Number(sequence), jobId: id });
-    void (async () => {
+    const task = (async () => {
       try {
         const result = await this.service.review(input, job.abort.signal, (state, message) => { if (!job.abort.signal.aborted) job.view = { id, state, message }; }, fresh, ignored as string[]);
         job.abort.signal.throwIfAborted(); job.view = { id, state: 'complete', message: 'Your guide is ready.', result };
@@ -67,6 +68,7 @@ export class Jobs {
         else job.view = { id, state: 'failed', message: 'Guide could not be generated.', error: error instanceof UserError ? error.message : 'Unexpected response. Check the local server and retry.' };
       }
     })();
+    this.running.add(task); void task.finally(() => this.running.delete(task));
     return job.view;
   }
   get(id: string): JobView { const job = this.jobs.get(id); if (!job) throw new UserError('This job expired or the server restarted. Start again.', 404); return job.view; }
@@ -75,5 +77,5 @@ export class Jobs {
     if (['loading', 'generating'].includes(job.view.state)) { job.abort.abort(); job.view = { id, state: 'cancelled', message: 'Generation cancelled.' }; }
     return job.view;
   }
-  stop(): void { for (const job of this.jobs.values()) job.abort.abort(); }
+  async close(): Promise<void> { this.closed = true; for (const job of this.jobs.values()) job.abort.abort(); await Promise.all(this.running); }
 }

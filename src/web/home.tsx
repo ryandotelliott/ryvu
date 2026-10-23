@@ -1,29 +1,31 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowUpDown, BookOpen, ChevronDown, RotateCw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList, ComboboxTrigger } from '@/components/ui/combobox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { api, ago, agoLong, readProgress, remember, seedIndex, useNow } from './api';
-import { homeHref, navigate, prHref } from './routes';
+import { listPulls } from '../inbox.functions';
+import { ago, agoLong, readProgress, remember, seedIndex, useNow } from './browser-state';
+import { homeLink, pullLink } from './links';
 import { AddRepoForm } from './settings';
 import { Avatar, PullIcon, RepoSwatch, Tip, repoColor } from './ui';
-import type { PullPage, PullSummary, PullTab, Settings } from '../types';
+import type { PullFilters, PullPage, PullSummary, PullTab, Settings } from '../types';
 
 const tabLabels: [PullTab, string][] = [['all', 'All open'], ['review', 'Review requested'], ['mine', 'Authored by me'], ['guides', 'Guide ready']];
 const filterKeys = ['tab', 'repo', 'author', 'drafts', 'sort'] as const;
 
 type ListState = { items: PullSummary[]; cursor: string | null; total: number; counts: NonNullable<PullPage['counts']>; repos: NonNullable<PullPage['repos']> };
-export function Home({ params, settings, onPage, onSettings }: { params: URLSearchParams; settings: Settings | null; onPage: (page: PullPage) => void; onSettings: (settings: Settings) => void }) {
+export function Home({ filters, settings, onPage, onSettings }: { filters: PullFilters; settings: Settings | null; onPage: (page: PullPage) => void; onSettings: (settings: Settings) => void }) {
   const [data, setData] = useState<ListState | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [loadingMore, setLoadingMore] = useState(false), [moreError, setMoreError] = useState(''), [refreshing, setRefreshing] = useState(false);
-  const request = useRef(0), sentinel = useRef<HTMLLIElement>(null), now = useNow();
-  const current = Object.fromEntries(filterKeys.map(key => [key, params.get(key) ?? ''])) as Record<(typeof filterKeys)[number], string>;
+  const request = useRef(0), sentinel = useRef<HTMLLIElement>(null), now = useNow(), navigate = useNavigate();
+  const current = Object.fromEntries(filterKeys.map(key => [key, filters[key] ?? ''])) as Record<(typeof filterKeys)[number], string>;
   const query = new URLSearchParams(Object.entries(current).filter(([, value]) => value)).toString(), configured = settings ? settings.repos.length > 0 : null;
   // The first page carries tab counts and per-repository totals; later pages only add items.
   async function load(refresh = false) {
     const id = ++request.current; setLoading(true); setMoreError(''); if (refresh) setRefreshing(true);
     try {
-      const page = await api<PullPage>(`/api/pulls?${query}${refresh ? `${query ? '&' : ''}refresh=1` : ''}`);
+      const page = await listPulls({ data: refresh ? { ...filters, refresh } : filters });
       if (id !== request.current) return;
       remember(page.items); setError(''); onPage(page);
       if (!query) seedIndex(page.items);
@@ -35,7 +37,7 @@ export function Home({ params, settings, onPage, onSettings }: { params: URLSear
     if (!data?.cursor || loadingMore || loading) return;
     const id = request.current, cursor = data.cursor; setLoadingMore(true); setMoreError('');
     try {
-      const page = await api<PullPage>(`/api/pulls?${query}${query ? '&' : ''}after=${encodeURIComponent(cursor)}`);
+      const page = await listPulls({ data: { ...filters, after: cursor } });
       if (id !== request.current) return;
       remember(page.items);
       setData(previous => previous && previous.cursor === cursor ? { ...previous, items: [...previous.items, ...page.items.filter(pull => !previous.items.some(item => item.url === pull.url))], cursor: page.cursor } : previous);
@@ -51,7 +53,7 @@ export function Home({ params, settings, onPage, onSettings }: { params: URLSear
     const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) void loadMore(); }, { rootMargin: '600px 0px' });
     observer.observe(node); return () => observer.disconnect();
   }, [data?.cursor, data?.items.length, loadingMore, moreError]);
-  const set = (key: string, value: string | number) => navigate(homeHref({ ...current, [key]: value }));
+  const set = (key: string, value: string) => void navigate(homeLink({ ...current, [key]: value }));
   if (configured === false) return <Onboarding onSettings={onSettings} />;
   const drafts = current.drafts || (settings?.showDrafts === false ? 'hidden' : 'shown');
   const openTotal = data?.repos.reduce((sum, repo) => sum + repo.open, 0) ?? 0;
@@ -66,9 +68,9 @@ export function Home({ params, settings, onPage, onSettings }: { params: URLSear
     </header>
     <div className="filters">
       <nav className="tabs" aria-label="Pull request lists">
-        {tabLabels.map(([name, label]) => <a key={name} href={homeHref({ ...current, tab: name === 'all' ? undefined : name })} className={tab === name ? 'is-active' : ''} aria-current={tab === name ? 'page' : undefined}>
+        {tabLabels.map(([name, label]) => <Link key={name} {...homeLink({ ...current, tab: name === 'all' ? undefined : name })} className={tab === name ? 'is-active' : ''} aria-current={tab === name ? 'page' : undefined}>
           {label}{data && <span className="tab-count">{data.counts[name]}</span>}
-        </a>)}
+        </Link>)}
       </nav>
       <div className="filter-menus">
         <FilterCombobox label="Repository" search="Find a repository…" value={current.repo} display={current.repo ? current.repo.split('/')[1] : 'All'} onChange={value => set('repo', value)} options={[{ value: '', label: 'All repositories' }, ...(settings?.repos ?? []).map(repo => ({ value: repo, label: repo, icon: <RepoSwatch color={repoColor(settings!.repos, repo)} /> }))]} />
@@ -79,7 +81,7 @@ export function Home({ params, settings, onPage, onSettings }: { params: URLSear
     </div>
     {error && !data?.items.length ? <div className="empty"><p>{error}</p><Button variant="ghost" size="xs" onClick={() => void load()}>Try again</Button></div>
       : !data || (loading && !data.items.length) ? <ul className="pull-list" aria-busy="true">{Array.from({ length: 6 }, (_, i) => <li key={i} className="pull-row skeleton"><span className="bone" style={{ width: `${48 - i * 4}%` }} /><span className="bone short" /></li>)}</ul>
-      : data.items.length === 0 ? <div className="empty"><p>{data.total === 0 && tab === 'all' && !current.repo && !current.author ? 'No open pull requests in these repositories.' : 'No pull requests match these filters.'}</p>{(current.repo || current.author || current.tab || current.drafts) && <a className={buttonVariants({ variant: 'ghost', size: 'xs' })} href="/">Clear filters</a>}</div>
+      : data.items.length === 0 ? <div className="empty"><p>{data.total === 0 && tab === 'all' && !current.repo && !current.author ? 'No open pull requests in these repositories.' : 'No pull requests match these filters.'}</p>{(current.repo || current.author || current.tab || current.drafts) && <Link {...homeLink()} className={buttonVariants({ variant: 'ghost', size: 'xs' })}>Clear filters</Link>}</div>
       : <ul className={`pull-list ${loading ? 'is-loading' : ''}`}>
         {data.items.map(pull => <PullRow key={`${pull.repo}#${pull.number}`} pull={pull} color={repoColor(settings?.repos ?? [], pull.repo)} now={now} />)}
         {data.cursor && !moreError && <li ref={sentinel} className="pull-row skeleton" aria-busy="true"><span className="bone" style={{ width: '42%' }} /><span className="bone short" /></li>}
@@ -96,7 +98,7 @@ function GuideChip({ pull }: { pull: PullSummary }) {
   return <span className="chip guide"><BookOpen size={11} />{label}</span>;
 }
 function PullRow({ pull, color, now }: { pull: PullSummary; color: string; now: number }) {
-  return <li><a className={`pull-row ${pull.isDraft ? 'is-draft' : ''}`} href={prHref(pull.repo, pull.number)}>
+  return <li><Link {...pullLink(pull.repo, pull.number)} className={`pull-row ${pull.isDraft ? 'is-draft' : ''}`}>
     <span className="pull-status"><PullIcon draft={pull.isDraft} state={pull.state} /></span>
     <span className="pull-text">
       <span className="pull-title">{pull.title}</span>
@@ -106,7 +108,7 @@ function PullRow({ pull, color, now }: { pull: PullSummary; color: string; now: 
     <span className="diffstat"><span className="added">+{pull.additions.toLocaleString()}</span><span className="removed">−{pull.deletions.toLocaleString()}</span></span>
     <Avatar login={pull.author} />
     <Tip content={`Updated ${new Date(pull.updatedAt).toLocaleString()}`} delay="long"><span className="pull-updated">{ago(pull.updatedAt, now)}</span></Tip>
-  </a></li>;
+  </Link></li>;
 }
 
 type FilterOption = { value: string; label: string; icon?: ReactNode };

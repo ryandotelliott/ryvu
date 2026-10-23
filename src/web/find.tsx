@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, FoldVertical, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Toggle } from '@/components/ui/toggle';
-import { fileAnchor } from './diff';
+import { fileAnchor, scrollPageBy } from './pull-page';
 import { Tip } from './ui';
 import type { ChangedFile } from '../types';
 
@@ -77,13 +77,13 @@ export function scrollToMatch(match: FindMatch, offset: number) {
   let frames = 0, started = false;
   const step = () => {
     const row = rowFor(match);
-    if (row) { const box = row.getBoundingClientRect(); window.scrollBy(0, box.top + box.height / 2 - (window.innerHeight + offset) / 2); return; }
+    if (row) { const box = row.getBoundingClientRect(); scrollPageBy(box.top + box.height / 2 - (window.innerHeight + offset) / 2); return; }
     if (++frames > 160) return;
     const card = document.getElementById(fileAnchor(match.path));
     if (card && frames % 2 === 0) {
       const box = card.getBoundingClientRect();
-      if (!started) { window.scrollBy(0, box.top - offset); started = true; }
-      else if (box.bottom > window.innerHeight) window.scrollBy(0, window.innerHeight * 0.6);
+      if (!started) { scrollPageBy(box.top - offset); started = true; }
+      else if (box.bottom > window.innerHeight) scrollPageBy(window.innerHeight * 0.6);
       else return;
     }
     requestAnimationFrame(step);

@@ -1,20 +1,6 @@
 import { useEffect, useState } from 'react';
+import { listPullIndex } from '../inbox.functions';
 import type { IndexedPull, PullSummary } from '../types';
-
-export type Bootstrap = { token: string; model: string; limits: { files: number; patchCharacters: number } };
-let token: string | null = null;
-export async function connect(): Promise<Bootstrap> {
-  const response = await fetch('/api/bootstrap');
-  if (!response.ok) throw Error('Could not connect to the local server.');
-  const value: Bootstrap = await response.json(); token = value.token; return value;
-}
-export async function api<T>(path: string, body?: unknown, method?: 'DELETE'): Promise<T> {
-  if (!token) throw Error('The local server is still connecting.');
-  const response = await fetch(path, { method: method ?? (body === undefined ? 'GET' : 'POST'), headers: { 'x-review-token': token, ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Error(data.error ?? 'Local request failed.');
-  return data as T;
-}
 
 // Pulls seen in lists and search, so the guide view can show a title before the snapshot loads.
 // Palette entries carry only the basics; lists and lookups fill in the rest.
@@ -27,7 +13,7 @@ export function recall(repo: string, number: number) { return known.get(pullKey(
 let index: { at: number; request: Promise<IndexedPull[]> } | null = null;
 export function pullIndex(): Promise<IndexedPull[]> {
   if (!index || Date.now() - index.at > 60_000) {
-    const request = api<IndexedPull[]>('/api/pulls/index').then(pulls => { remember(pulls); return pulls; });
+    const request = listPullIndex({ data: {} }).then(pulls => { remember(pulls); return pulls; });
     request.catch(() => { index = null; });
     index = { at: Date.now(), request };
   }

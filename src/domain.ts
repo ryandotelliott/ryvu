@@ -5,6 +5,10 @@ export const PROMPT_VERSION = 'guide-v1';
 export const MAX_FILES = 200;
 export const MAX_PATCH_CHARS = 120_000;
 export class UserError extends Error { constructor(message: string, public status = 422) { super(message); } }
+export function fields(input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new UserError('Invalid request.', 400);
+  return { ...input };
+}
 const OWNER = '[A-Za-z0-9][A-Za-z0-9-]{0,38}', NAME = '[A-Za-z0-9_.-]{1,100}';
 const validName = (name: string) => name !== '.' && name !== '..';
 export type PullReference = { owner: string; repo: string; number: number } | { owner?: undefined; repo?: undefined; number: number };
