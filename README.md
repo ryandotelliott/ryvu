@@ -24,6 +24,8 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 
 ## What it covers
 
+- The PR list keeps four tabs visible. List options contains searchable repository and author filters, draft visibility, and sorting by update date, creation date or repository, with matching sections.
+
 - The shadcn Sidebar keeps app navigation above the files on Overview, Guide and Diff. Repositories can collapse, and the file tree compacts nested folders and truncates only the last name. Drag the sidebar edge to resize it; double-click to reset. Search files with the magnifying glass or `/`; use the adjacent display button to switch between folders and diff order or hide matching files. Press `F` or `⌘B` / `Ctrl+B` to toggle the sidebar.
 - Chapters organized around intent and behavior, with evidence highlighting and links to each section's files.
 - Display settings, remembered in this browser: unified/split layout, hidden whitespace-only changes, line wrapping, word highlights, line numbers and code size. Diffs render through `@pierre/diffs`.

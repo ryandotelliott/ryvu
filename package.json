@@ -7,7 +7,8 @@
     "dev": "vite dev",
     "build": "vite build && tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "start": "node --disable-warning=ExperimentalWarning scripts/start.mjs"
+    "start": "node --disable-warning=ExperimentalWarning scripts/start.mjs",
+    "test:inbox": "tsc -p tsconfig.inbox-tests.json && node --disable-warning=ExperimentalWarning --test .verify/inbox-tests/tests/inbox.test.js"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

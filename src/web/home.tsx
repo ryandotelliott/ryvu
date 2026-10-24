@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowUpDown, BookOpen, ChevronDown, RotateCw } from 'lucide-react';
+import { BookOpen, ChevronRight, RotateCw, SlidersHorizontal } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList, ComboboxTrigger } from '@/components/ui/combobox';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
+import { Separator } from '@/components/ui/separator';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { listPulls } from '../inbox.functions';
 import { ago, agoLong, readProgress, remember, seedIndex, useNow } from './browser-state';
+import { groupPulls } from './home-groups';
 import { homeLink, pullLink } from './links';
 import { AddRepoForm } from './settings';
-import { Avatar, PullIcon, RepoSwatch, Tip, repoColor } from './ui';
-import type { PullFilters, PullPage, PullSummary, PullTab, Settings } from '../types';
+import { Avatar, focusOnKeyboardOpen, RadioRows, PullIcon, RepoSwatch, Tip, repoColor } from './ui';
+import type { PullFilters, PullPage, PullSummary, PullTab, PullSort, Settings } from '../types';
 
 const tabLabels: [PullTab, string][] = [['all', 'All open'], ['review', 'Review requested'], ['mine', 'Authored by me'], ['guides', 'Guide ready']];
-const filterKeys = ['tab', 'repo', 'author', 'drafts', 'sort'] as const;
 
 type ListState = { items: PullSummary[]; cursor: string | null; total: number; counts: NonNullable<PullPage['counts']>; repos: NonNullable<PullPage['repos']> };
 export function Home({ filters, settings, onPage, onSettings }: { filters: PullFilters; settings: Settings | null; onPage: (page: PullPage) => void; onSettings: (settings: Settings) => void }) {
   const [data, setData] = useState<ListState | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [loadingMore, setLoadingMore] = useState(false), [moreError, setMoreError] = useState(''), [refreshing, setRefreshing] = useState(false);
-  const request = useRef(0), sentinel = useRef<HTMLLIElement>(null), now = useNow(), navigate = useNavigate();
-  const current = Object.fromEntries(filterKeys.map(key => [key, filters[key] ?? ''])) as Record<(typeof filterKeys)[number], string>;
+  const request = useRef(0), sentinel = useRef<HTMLDivElement>(null), now = useNow(), navigate = useNavigate();
+  const current = { tab: filters.tab ?? '', repo: filters.repo ?? '', author: filters.author ?? '', drafts: filters.drafts ?? '', sort: filters.sort ?? '' };
   const query = new URLSearchParams(Object.entries(current).filter(([, value]) => value)).toString(), configured = settings ? settings.repos.length > 0 : null;
   // The first page carries tab counts and per-repository totals; later pages only add items.
   async function load(refresh = false) {
@@ -53,11 +55,13 @@ export function Home({ filters, settings, onPage, onSettings }: { filters: PullF
     const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) void loadMore(); }, { rootMargin: '600px 0px' });
     observer.observe(node); return () => observer.disconnect();
   }, [data?.cursor, data?.items.length, loadingMore, moreError]);
-  const set = (key: string, value: string) => void navigate(homeLink({ ...current, [key]: value }));
+  const set = (key: keyof PullFilters, value: string) => void navigate(homeLink({ ...current, [key]: value }));
   if (configured === false) return <Onboarding onSettings={onSettings} />;
   const drafts = current.drafts || (settings?.showDrafts === false ? 'hidden' : 'shown');
   const openTotal = data?.repos.reduce((sum, repo) => sum + repo.open, 0) ?? 0;
-  const tab = (current.tab || 'all') as PullTab;
+  const tab = tabLabels.find(([name]) => name === current.tab)?.[0] ?? 'all';
+  const sort: PullSort = current.sort === 'created' ? 'created' : current.sort === 'repo' ? 'repo' : 'updated';
+  const groups = groupPulls(data?.items ?? [], sort, now);
   // Without a full list, author choices come from the PRs loaded so far.
   const authors = [...new Set([...(data?.items.map(pull => pull.author) ?? []), ...(current.author ? [current.author] : [])])].sort((a, b) => a.localeCompare(b));
   return <div className="home">
@@ -72,20 +76,28 @@ export function Home({ filters, settings, onPage, onSettings }: { filters: PullF
           {label}{data && <span className="tab-count">{data.counts[name]}</span>}
         </Link>)}
       </nav>
-      <div className="filter-menus">
-        <FilterCombobox label="Repository" search="Find a repository…" value={current.repo} display={current.repo ? current.repo.split('/')[1] : 'All'} onChange={value => set('repo', value)} options={[{ value: '', label: 'All repositories' }, ...(settings?.repos ?? []).map(repo => ({ value: repo, label: repo, icon: <RepoSwatch color={repoColor(settings!.repos, repo)} /> }))]} />
-        <FilterCombobox label="Author" search="Find an author…" value={current.author} display={current.author || 'Anyone'} onChange={value => set('author', value)} options={[{ value: '', label: 'Anyone' }, ...authors.map(author => ({ value: author, label: author, icon: <Avatar login={author} size={16} /> }))]} />
-        <FilterMenu label="Drafts" value={drafts} display={drafts === 'hidden' ? 'Hidden' : 'Shown'} onChange={value => set('drafts', value)} options={[{ value: 'shown', label: 'Show drafts' }, { value: 'hidden', label: 'Hide drafts' }]} />
-        <FilterMenu label={<ArrowUpDown size={13} />} value={current.sort || 'updated'} display={current.sort === 'created' ? 'Newest' : 'Recently updated'} plain onChange={value => set('sort', value === 'updated' ? '' : value)} options={[{ value: 'updated', label: 'Recently updated' }, { value: 'created', label: 'Newest' }]} />
-      </div>
+      <Popover>
+        <Tip content="List options" side="bottom"><PopoverTrigger render={<Button variant="ghost" size="icon-sm" className="list-options" aria-label="List options" />}><SlidersHorizontal /></PopoverTrigger></Tip>
+        <PopoverContent align="end" className="w-68 gap-0 p-1" initialFocus={focusOnKeyboardOpen}>
+          <PopoverTitle className="px-2 py-1.5 text-xs text-muted-foreground">Filters</PopoverTitle>
+          <FilterCombobox label="Repository" search="Find a repository…" value={current.repo} display={current.repo ? current.repo.split('/')[1] : 'All'} onChange={value => set('repo', value)} options={[{ value: '', label: 'All repositories' }, ...(settings?.repos ?? []).map(repo => ({ value: repo, label: repo, icon: <RepoSwatch color={repoColor(settings!.repos, repo)} /> }))]} />
+          <FilterCombobox label="Author" search="Find an author…" value={current.author} display={current.author || 'Anyone'} onChange={value => set('author', value)} options={[{ value: '', label: 'Anyone' }, ...authors.map(author => ({ value: author, label: author, icon: <Avatar login={author} size={16} /> }))]} />
+          <FilterMenu label="Drafts" value={drafts} display={drafts === 'hidden' ? 'Hidden' : 'Shown'} onChange={value => set('drafts', value)} options={[{ value: 'shown', label: 'Show drafts' }, { value: 'hidden', label: 'Hide drafts' }]} />
+          <Separator className="my-1" />
+          <FilterMenu label="Sort by" value={sort} display={sort === 'created' ? 'Recently created' : sort === 'repo' ? 'Repository' : 'Recently updated'} onChange={value => set('sort', value === 'updated' ? '' : value)} options={[{ value: 'updated', label: 'Recently updated' }, { value: 'created', label: 'Recently created' }, { value: 'repo', label: 'Repository' }]} />
+        </PopoverContent>
+      </Popover>
     </div>
     {error && !data?.items.length ? <div className="empty"><p>{error}</p><Button variant="ghost" size="xs" onClick={() => void load()}>Try again</Button></div>
       : !data || (loading && !data.items.length) ? <ul className="pull-list" aria-busy="true">{Array.from({ length: 6 }, (_, i) => <li key={i} className="pull-row skeleton"><span className="bone" style={{ width: `${48 - i * 4}%` }} /><span className="bone short" /></li>)}</ul>
       : data.items.length === 0 ? <div className="empty"><p>{data.total === 0 && tab === 'all' && !current.repo && !current.author ? 'No open pull requests in these repositories.' : 'No pull requests match these filters.'}</p>{(current.repo || current.author || current.tab || current.drafts) && <Link {...homeLink()} className={buttonVariants({ variant: 'ghost', size: 'xs' })}>Clear filters</Link>}</div>
-      : <ul className={`pull-list ${loading ? 'is-loading' : ''}`}>
-        {data.items.map(pull => <PullRow key={`${pull.repo}#${pull.number}`} pull={pull} color={repoColor(settings?.repos ?? [], pull.repo)} now={now} />)}
-        {data.cursor && !moreError && <li ref={sentinel} className="pull-row skeleton" aria-busy="true"><span className="bone" style={{ width: '42%' }} /><span className="bone short" /></li>}
-      </ul>}
+      : <div className={`pull-groups ${loading ? 'is-loading' : ''}`}>
+        {groups.map(group => <section className="pull-group" key={group.key} aria-label={group.title}>
+          <h2 className="pull-group-heading">{sort === 'repo' && <RepoSwatch color={repoColor(settings?.repos ?? [], group.key)} />}{group.title}</h2>
+          <ul className="pull-list">{group.items.map(pull => <PullRow key={`${pull.repo}#${pull.number}`} pull={pull} color={repoColor(settings?.repos ?? [], pull.repo)} now={now} sort={sort} />)}</ul>
+        </section>)}
+        {data.cursor && !moreError && <div ref={sentinel} className="pull-row skeleton" aria-busy="true"><span className="bone" style={{ width: '42%' }} /><span className="bone short" /></div>}
+      </div>}
     {moreError && <div className="list-end"><span>{moreError}</span><Button variant="ghost" size="xs" onClick={() => void loadMore()}>Try again</Button></div>}
     {data && !data.cursor && data.items.length > 0 && <div className="list-end">{data.items.length === 1 ? 'That’s the only one' : `That’s all ${data.items.length}`}</div>}
   </div>;
@@ -97,7 +109,8 @@ function GuideChip({ pull }: { pull: PullSummary }) {
   const label = read === 0 ? 'Guide ready' : read === pull.guide.chapters ? 'Guide reviewed' : `Guide · ${read} of ${pull.guide.chapters} read`;
   return <span className="chip guide"><BookOpen size={11} />{label}</span>;
 }
-function PullRow({ pull, color, now }: { pull: PullSummary; color: string; now: number }) {
+function PullRow({ pull, color, now, sort }: { pull: PullSummary; color: string; now: number; sort: PullSort }) {
+  const timestamp = sort === 'created' ? pull.createdAt : pull.updatedAt, dateLabel = sort === 'created' ? 'Created' : 'Updated';
   return <li><Link {...pullLink(pull.repo, pull.number)} className={`pull-row ${pull.isDraft ? 'is-draft' : ''}`}>
     <span className="pull-status"><PullIcon draft={pull.isDraft} state={pull.state} /></span>
     <span className="pull-text">
@@ -107,31 +120,32 @@ function PullRow({ pull, color, now }: { pull: PullSummary; color: string; now: 
     <span className="pull-chips">{pull.reviewRequested && <span className="chip review">Review requested</span>}<GuideChip pull={pull} />{pull.isDraft && <span className="chip">Draft</span>}</span>
     <span className="diffstat"><span className="added">+{pull.additions.toLocaleString()}</span><span className="removed">−{pull.deletions.toLocaleString()}</span></span>
     <Avatar login={pull.author} />
-    <Tip content={`Updated ${new Date(pull.updatedAt).toLocaleString()}`} delay="long"><span className="pull-updated">{ago(pull.updatedAt, now)}</span></Tip>
+    <Tip content={`${dateLabel} ${new Date(timestamp).toLocaleString()}`} delay="long"><time className="pull-updated" dateTime={timestamp}>{ago(timestamp, now)}</time></Tip>
   </Link></li>;
 }
 
 type FilterOption = { value: string; label: string; icon?: ReactNode };
 function FilterTrigger({ label, display }: { label: ReactNode; display: string }) {
-  return <><span className="filter-label">{label}</span><span className="filter-value">{display}</span></>;
+  return <><span>{label}</span><span className="ml-auto max-w-36 truncate text-muted-foreground">{display}</span></>;
 }
-function FilterMenu({ label, value, display, options, onChange, plain }: { label: ReactNode; value: string; display: string; options: FilterOption[]; onChange: (value: string) => void; plain?: boolean }) {
-  return <DropdownMenu>
-    <DropdownMenuTrigger render={<Button variant={plain ? 'ghost' : 'outline'} size="sm" />}><FilterTrigger label={label} display={display} />{!plain && <ChevronDown className="text-muted-foreground" />}</DropdownMenuTrigger>
-    <DropdownMenuContent align="end" sideOffset={6} className="w-auto min-w-48">
-      <DropdownMenuRadioGroup value={value} onValueChange={next => onChange(String(next))}>
-        {options.map(option => <DropdownMenuRadioItem key={option.value || 'all'} value={option.value}>{option.icon}{option.label}</DropdownMenuRadioItem>)}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>;
+function FilterMenu({ label, value, display, options, onChange }: { label: string; value: string; display: string; options: FilterOption[]; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false), isMobile = useIsMobile();
+  return <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger render={<Button variant="ghost" className="w-full justify-start px-2 font-normal" />}><FilterTrigger label={label} display={display} /><ChevronRight /></PopoverTrigger>
+    <PopoverContent side={isMobile ? 'bottom' : 'right'} align={isMobile ? 'end' : 'start'} sideOffset={8} className="w-56 max-w-[calc(100vw-16px)] gap-1 p-1" initialFocus={focusOnKeyboardOpen}>
+      <PopoverTitle className="sr-only">{label}</PopoverTitle>
+      <RadioRows label={label} value={value} onChange={next => { setOpen(false); onChange(next); }} options={options} />
+    </PopoverContent>
+  </Popover>;
 }
 
 // A filter menu with a search field, for lists that can get long.
 function FilterCombobox({ label, search, value, display, options, onChange }: { label: ReactNode; search: string; value: string; display: string; options: FilterOption[]; onChange: (value: string) => void }) {
+  const isMobile = useIsMobile();
   return <Combobox items={options} value={options.find(option => option.value === value) ?? null} onValueChange={next => { if (next) onChange(next.value); }}
       itemToStringLabel={option => option.label} isItemEqualToValue={(a, b) => a.value === b.value} autoHighlight>
-    <ComboboxTrigger render={<Button variant="outline" size="sm" />}><FilterTrigger label={label} display={display} /></ComboboxTrigger>
-    <ComboboxContent align="end" className="w-auto min-w-60">
+    <ComboboxTrigger className="[&>svg:last-child]:-rotate-90" render={<Button variant="ghost" className="w-full justify-start px-2 font-normal" />}><FilterTrigger label={label} display={display} /></ComboboxTrigger>
+    <ComboboxContent side={isMobile ? 'bottom' : 'right'} align={isMobile ? 'end' : 'start'} sideOffset={8} className="w-72 min-w-0">
       <ComboboxInput showTrigger={false} placeholder={search} />
       <ComboboxEmpty>No matches</ComboboxEmpty>
       <ComboboxList>

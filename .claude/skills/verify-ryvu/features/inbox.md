@@ -1,10 +1,12 @@
 # Inbox and ⌘K
 
-The home page lists open pull requests across the user's repositories, with tabs for all, review requested, authored and guide-ready PRs. ⌘K opens a palette that searches PRs by title and opens one; clicking a row opens that PR's Overview.
+The home page lists open pull requests across the user's repositories, with four tabs for all, review requested, authored and guide-ready PRs. List options holds repository, author, draft and sort controls; repository and author open searchable subpanels. Updated and created sorts use local-calendar sections for today, yesterday, the last 7 days, the last 30 days and older PRs. Repository sorting groups alphabetically, with recently updated PRs first within each repository. ⌘K opens a palette that searches PRs by title and opens one; clicking a row opens that PR's Overview.
 
 ## Sub-features
 
 - `inbox-list` shows open PRs from the seeded repositories, newest activity first.
+- `inbox-options` searches repository and author choices, toggles drafts, and chooses the sort.
+- `inbox-groups` groups the full paginated list by the chosen date or repository.
 - `inbox-tabs` switches between All open, Review requested, Authored by me and Guide ready.
 - `palette-search` finds a PR by words from its title.
 - `inbox-open` opens a row on the PR's Overview page.
@@ -13,6 +15,7 @@ The home page lists open pull requests across the user's repositories, with tabs
 
 - Open `/` (the app's start page); the sidebar's "Pull requests" link returns there.
 - Press ⌘K (Ctrl+K) anywhere, or click "Find a pull request" in the sidebar.
+- Use List options to open the nested filter and sort panels.
 - Click a tab above the list; each is a link with `?tab=review|mine|guides`.
 
 ## Driving it with Playwright
@@ -24,6 +27,7 @@ Preconditions:
 - **List loads.** Open `/`. `go('/')`, then wait for `a.pull-row:not(.skeleton)`. At least one row shows with a `.pull-title`.
 - **Palette search.** Press `Meta+k`, fill the input with placeholder `Search pull requests, or paste a link or number` with three words from the first row's title. An option whose name contains that title appears.
 - **Open a PR.** Press Escape, click the first row. The URL becomes `/pr/<owner>/<repo>/<n>`, `.pr-heading h1` equals the row's title, and the `Overview` tab has `aria-current="page"`.
+- **Options and grouping.** Run `journeys/inbox-options.mjs` for searchable subpanels, Escape, filters, date copy, repository groups, pagination and narrow-screen fitting. `pnpm test:inbox` checks calendar boundaries and server pagination across repositories.
 - **Proof.** Screenshots of the list, the palette with the match, and the Overview.
 
 ## Gotchas

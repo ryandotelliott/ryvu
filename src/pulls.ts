@@ -10,6 +10,7 @@ const NODE = '... on PullRequest { number title url isDraft state createdAt upda
 // GraphQL names app authors without the [bot] suffix that REST uses.
 const authorLogin = (author: Record<string, any> | null | undefined) => { const login = String(author?.login ?? 'ghost'); return author?.__typename === 'Bot' && !login.endsWith('[bot]') ? `${login}[bot]` : login; };
 const CURSOR = /^(offset:\d{1,5}|[A-Za-z0-9+/=_-]{1,300})$/;
+const REPO_CURSOR = /^repo:(\d{1,2}):([A-Za-z0-9+/=_-]{0,300})$/;
 export function pullQuery(input: unknown): PullQuery {
   const raw = fields(input), text = (key: string) => {
     const value = raw[key];
@@ -80,6 +81,22 @@ export class Inbox {
     return rows.map((_, i) => data[`g${i}`]?.pullRequest).filter(Boolean).map(node => this.publish(this.fromNode(node, viewer)))
       .filter(pull => pull.state === 'open' && pull.guide !== null && filter(pull)).sort((a, b) => b[sort].localeCompare(a[sort]));
   }
+  private async repositoryPage({ repos, pageSize, after, search, viewer, keep, requested }: { repos: string[]; pageSize: number; after?: string; search: (repo: string) => string; viewer: string; keep: (pull: PullSummary) => boolean; requested?: boolean }): Promise<Pick<PullPage, 'items' | 'cursor'>> {
+    const parsed = after?.match(REPO_CURSOR);
+    let index = parsed ? Number(parsed[1]) : 0, cursor = parsed?.[2] || undefined;
+    if ((after && !parsed) || index >= repos.length) throw new UserError('Invalid page cursor.', 400);
+    const items: PullSummary[] = [];
+    while (index < repos.length && items.length < pageSize) {
+      const data = await this.graphql(`query { page: search(query: ${JSON.stringify(`${search(repos[index])} sort:updated-desc`)}, type: ISSUE, first: ${pageSize - items.length}${cursor ? `, after: ${JSON.stringify(cursor)}` : ''}) { pageInfo { endCursor hasNextPage } nodes { ${NODE} } } }`);
+      const page = data.page ?? {}, previous = cursor;
+      items.push(...(Array.isArray(page.nodes) ? page.nodes : []).filter((node: Record<string, any>) => node?.number).map((node: Record<string, any>) => this.publish(this.fromNode(node, viewer, requested))).filter(keep));
+      if (page.pageInfo?.hasNextPage) {
+        cursor = page.pageInfo.endCursor;
+        if (typeof cursor !== 'string' || !cursor || cursor === previous) throw new UserError('GitHub returned an invalid page cursor.');
+      } else { index++; cursor = undefined; }
+    }
+    return { items, cursor: index < repos.length ? `repo:${index}:${cursor ?? ''}` : null };
+  }
   // One page of open PRs across the configured repositories, fetched from GitHub search with a cursor.
   async page(settings: Settings, query: PullQuery): Promise<PullPage> {
     if (!settings.repos.length) return { items: [], total: 0, cursor: null, counts: { all: 0, review: 0, mine: 0, guides: 0 }, repos: [], errors: [] };
@@ -87,27 +104,38 @@ export class Inbox {
     if (!['all', 'review', 'mine', 'guides'].includes(tab)) throw new UserError('Unknown tab.', 400);
     if (repo && !settings.repos.includes(repo)) throw new UserError('That repository isn’t on your list.', 400);
     if (author && !/^[A-Za-z0-9-]{1,39}(\[bot\])?$/.test(author)) throw new UserError('Unknown author.', 400);
-    if (after && !CURSOR.test(after)) throw new UserError('Invalid page cursor.', 400);
-    const drafts = query.drafts ? query.drafts === 'shown' : settings.showDrafts, sort = query.sort === 'created' ? 'created' : 'updated';
+    const drafts = query.drafts ? query.drafts === 'shown' : settings.showDrafts, sort = query.sort === 'created' ? 'created' : query.sort === 'repo' ? 'repo' : 'updated';
+    if (after && !(sort === 'repo' && tab !== 'guides' ? REPO_CURSOR : CURSOR).test(after)) throw new UserError('Invalid page cursor.', 400);
     const key = JSON.stringify([settings, tab, repo, author, drafts, sort, after]), cached = this.pages.get(key);
     if (cached && !query.refresh && Date.now() - cached.at < FRESH_FOR / 2) return cached.value;
-    const viewer = await this.login(), first = !after, repos = repo ? [repo] : settings.repos;
+    const viewer = await this.login(), first = !after, repos = (repo ? [repo] : [...settings.repos]).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     const scope = (list: string[]) => this.scope(settings, list);
-    const base = `${scope(repos)}${author ? ` author:${author.endsWith('[bot]') ? `app/${author.slice(0, -5)}` : author}` : ''}${drafts ? '' : ' draft:false'}`;
-    const queries = { all: base, review: `${base} review-requested:@me`, mine: `${base} author:@me` };
+    const queriesFor = (list: string[]) => {
+      const base = `${scope(list)}${author ? ` author:${author.endsWith('[bot]') ? `app/${author.slice(0, -5)}` : author}` : ''}${drafts ? '' : ' draft:false'}`;
+      return { all: base, review: `${base} review-requested:@me`, mine: `${base} author:@me` };
+    };
+    const queries = queriesFor(repos);
     const count = (alias: string, query: string) => `${alias}: search(query: ${JSON.stringify(query)}, type: ISSUE, first: 0) { issueCount }`;
     const parts: string[] = [];
-    if (tab !== 'guides') parts.push(`page: search(query: ${JSON.stringify(`${queries[tab]} sort:${sort}-desc`)}, type: ISSUE, first: ${settings.pageSize}${after ? `, after: ${JSON.stringify(after)}` : ''}) { issueCount pageInfo { endCursor hasNextPage } nodes { ${NODE} } }`);
+    if (tab !== 'guides' && sort !== 'repo') parts.push(`page: search(query: ${JSON.stringify(`${queries[tab]} sort:${sort}-desc`)}, type: ISSUE, first: ${settings.pageSize}${after ? `, after: ${JSON.stringify(after)}` : ''}) { issueCount pageInfo { endCursor hasNextPage } nodes { ${NODE} } }`);
+    if (tab !== 'guides' && sort === 'repo' && !first) parts.push(count('total', queries[tab]));
     if (first) {
       parts.push(count('all', queries.all), count('review', queries.review), count('mine', queries.mine));
       settings.repos.forEach((name, i) => parts.push(count(`r${i}`, scope([name])), count(`q${i}`, `${scope([name])} review-requested:@me`)));
     }
     const keep = (pull: PullSummary) => (!author || pull.author === author) && (drafts || !pull.isDraft) && (settings.showBots || !pull.authorIsBot);
-    const [data, guided] = await Promise.all([parts.length ? this.graphql(`query { ${parts.join('\n')} }`) : Promise.resolve({} as Record<string, any>), tab === 'guides' || first ? this.guided(repos, viewer, keep, sort === 'created' ? 'createdAt' : 'updatedAt') : Promise.resolve([])]);
+    const [data, guided, repositoryPage] = await Promise.all([
+      parts.length ? this.graphql(`query { ${parts.join('\n')} }`) : Promise.resolve({} as Record<string, any>),
+      tab === 'guides' || first ? this.guided(repos, viewer, keep, sort === 'created' ? 'createdAt' : 'updatedAt') : Promise.resolve([]),
+      tab !== 'guides' && sort === 'repo' ? this.repositoryPage({ repos, pageSize: settings.pageSize, after, search: repo => queriesFor([repo])[tab], viewer, keep, requested: tab === 'review' ? true : undefined }) : Promise.resolve(null)
+    ]);
     let items: PullSummary[], total: number, cursor: string | null;
     if (tab === 'guides') {
+      if (sort === 'repo') guided.sort((a, b) => a.repo.localeCompare(b.repo, undefined, { sensitivity: 'base' }) || b.updatedAt.localeCompare(a.updatedAt));
       const offset = after ? Number(after.slice('offset:'.length)) || 0 : 0;
       items = guided.slice(offset, offset + settings.pageSize); total = guided.length; cursor = offset + settings.pageSize < guided.length ? `offset:${offset + settings.pageSize}` : null;
+    } else if (repositoryPage) {
+      ({ items, cursor } = repositoryPage); total = Number((first ? data[tab] : data.total)?.issueCount) || 0;
     } else {
       const page = data.page ?? {};
       items = (Array.isArray(page.nodes) ? page.nodes : []).filter((node: Record<string, any>) => node?.number).map((node: Record<string, any>) => this.publish(this.fromNode(node, viewer, tab === 'review' ? true : undefined))).filter(keep);

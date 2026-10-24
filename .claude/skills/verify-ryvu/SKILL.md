@@ -70,6 +70,7 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 
 - Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`.
 - `review-sidebar`: full-height app navigation and files on all review views, compact folder labels, resizing and saved width, file search, file display settings, shadcn collapse controls, and the mobile Sheet.
+- `inbox-options`: nested list controls, searchable repository and author subpanels, date/repository sections, paginated ordering and narrow-screen fitting.
 - `tooltip-layout`: long file paths wrap inside a tooltip that fits the longest line; keyboard hints stay visible, including on a narrow viewport.
 - `file-progress`: the active file row fills as the diff scrolls, reverses when scrolling up, and resets on the next file, in both folder and diff-order views.
 - `scrolling`: compositor frames keep popovers attached to sticky controls while the page scrolls; the file list and folder tree scroll independently and contain scrolling at both edges. Needs a PR with enough files to overflow the sidebar.

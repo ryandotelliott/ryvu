@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "outDir": ".verify/inbox-tests",
+    "rootDir": "."
+  },
+  "include": ["tests/inbox.test.ts"]
+}
