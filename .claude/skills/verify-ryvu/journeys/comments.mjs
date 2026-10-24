@@ -1,29 +1,30 @@
 import { pickPullWithOpenThread } from './_pick.mjs';
-// Comments: open threads show in the code, the Comments list (C) jumps to one, and the display modes switch how they appear.
-// Read-only: never clicks Reply, Add to review or Submit review, which write to GitHub.
+// Read-only: never submits a reply or review to GitHub.
 export default async function (ctx) {
   const { page } = ctx;
   const { open, path } = await pickPullWithOpenThread(ctx);
   await ctx.go(`${path}/diff`);
   await ctx.waitForDiffRows();
-
-  await page.locator('body').click({ position: { x: 700, y: 600 } });
-  await page.keyboard.press('c');
-  await page.waitForSelector('.comments-menu');
-  const items = page.locator('.comments-menu-item:visible');
-  ctx.check(await items.count() >= open.length, `C opens the Comments list with ${await items.count()} entries (${open.length} open threads)`);
-  const cornersClipped = await page.locator('.comments-menu').evaluate(async popup => {
-    await Promise.all(popup.getAnimations({ subtree: true }).map(animation => animation.finished));
-    const box = popup.getBoundingClientRect();
-    return [[box.left + 1, box.top + 1], [box.right - 1, box.top + 1], [box.left + 1, box.bottom - 1], [box.right - 1, box.bottom - 1]]
-      .every(([x, y]) => !popup.contains(document.elementFromPoint(x, y)));
-  });
-  ctx.check(cornersClipped, 'the Comments list content stays inside all four rounded corners');
-  await ctx.shot('comments-list');
-  await items.first().click(); await page.waitForTimeout(2500);
-  const focused = await page.evaluate(() => { const el = document.querySelector('.comment-fold.is-focused'); return el ? Math.round(el.getBoundingClientRect().top) : null; });
-  ctx.check(focused !== null && focused > 100 && focused < 900, `picking the first entry centres its thread in the diff (${focused}px)`);
-  await ctx.shot('jumped-to-thread');
+  const target = open[0];
+  await page.getByRole('button', { name: 'File list display', exact: true }).click();
+  await page.getByRole('button', { name: 'Diff order', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Search files', exact: true }).click();
+  const filter = page.getByPlaceholder('Filter files');
+  await filter.fill(target.path);
+  await page.locator('.list-file').first().click();
+  await filter.press('Escape');
+  await page.waitForTimeout(600);
+  const thread = page.locator('.comment-fold').filter({ has: page.locator(`a[href="${target.html_url}"]`) });
+  for (let step = 0; step < 100; step++) {
+    const box = await thread.first().boundingBox();
+    if (box && box.height > 0 && box.y + box.height > 108 && box.y < 850) break;
+    await page.mouse.move(900, 600); await page.mouse.wheel(0, 500); await page.waitForTimeout(100);
+  }
+  const box = await thread.first().boundingBox();
+  ctx.check(box && box.y + box.height > 108 && box.y < 850, `the file draws GitHub's thread by ${target.user.login} at line ${target.line}`);
+  ctx.check(await thread.getByText(target.user.login, { exact: true }).count() > 0, 'the inline thread identifies its GitHub author');
+  await ctx.shot('inline-thread');
 
   const display = page.locator('.toolbar-actions [aria-label="Display settings"]');
   await display.click(); await page.getByRole('radio', { name: 'Indicators' }).click(); await page.keyboard.press('Escape'); await page.waitForTimeout(800);

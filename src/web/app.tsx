@@ -12,6 +12,8 @@ import { recall } from './browser-state';
 import { hiddenPaths } from './file-filters';
 import { homeLink, pullLink, type PullTarget, type PullViewName } from './links';
 import { CommandPalette } from './palette';
+import { AppShell } from './shell';
+import { SidebarProvider } from '@/components/ui/sidebar';
 import { PullIcon, RepoSwatch, StatusBox, Tip, repoColor } from './ui';
 import type { JobView, PullDetail, PullPage as PullList, Settings } from '../types';
 
@@ -79,10 +81,10 @@ function useAppState() {
 export type ApplicationState = ReturnType<typeof useAppState>;
 export function Application({ children }: { children: ReactNode }) {
   const app = useAppState();
-  return <AppContext.Provider value={app}>
+  return <SidebarProvider defaultOpen={typeof document === 'undefined' || !document.cookie.split('; ').includes('sidebar_state=false')}><AppContext.Provider value={app}>
     {children}
     <CommandPalette open={app.paletteOpen} onOpenChange={app.setPaletteOpen} settings={app.settings} />
-  </AppContext.Provider>;
+  </AppContext.Provider></SidebarProvider>;
 }
 
 export function PullPage({ target }: { target: PullTarget }) {
@@ -101,11 +103,12 @@ export function PullPage({ target }: { target: PullTarget }) {
   }, [target.key, target.analyze, Boolean(shown)]);
   useEffect(() => { document.title = shown ? `${shown.snapshot.title} · PR Guide` : 'Loading · PR Guide'; }, [shown, target.key]);
   const color = repoColor(app.settings?.repos ?? [], target.repo), forThis = app.jobKey === target.key;
-  const preparing = <Preparing target={target} error={app.loadError} onRetry={() => { app.loading.current = null; void app.load(target); }} color={color} />;
+  const navigation = { settings: app.settings, repoCounts: app.repoCounts, onSearch: app.openPalette };
+  const preparing = <AppShell settings={app.settings} repoCounts={app.repoCounts} onSearch={app.openPalette}><Preparing target={target} error={app.loadError} onRetry={() => { app.loading.current = null; void app.load(target); }} color={color} /></AppShell>;
   if (!shown) return preparing;
   const status = forThis && (app.analyzing || app.jobError || app.job?.state === 'cancelled') ? <StatusBox key={app.epoch.current} job={app.job} error={app.jobError} canCancel={Boolean(app.currentJob.current)} onCancel={() => void app.cancel()} /> : null;
   return <Suspense fallback={preparing}>
-    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} status={status} analyzing={forThis && app.analyzing}
+    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} navigation={navigation} status={status} analyzing={forThis && app.analyzing}
       onDetail={update => app.setPull(current => current?.key === target.key ? { key: target.key, detail: update(current.detail) } : current)}
       onAnalyze={fresh => void app.analyze(target, fresh, shown.snapshot.files.map(file => file.path))} color={color} />
   </Suspense>;
@@ -141,7 +144,7 @@ function PullSkeleton({ target, title, color }: { target: PullTarget; title?: st
       <div className="topbar-actions"><Skeleton className="h-7 w-28" /></div>
     </header>
     {target.view === 'overview' ? <div className="overview-layout">
-        <main className="overview-main">{heading}{lines(['w-full', 'w-full', 'w-11/12', 'w-2/3'])}</main>
+        <div className="overview-main">{heading}{lines(['w-full', 'w-full', 'w-11/12', 'w-2/3'])}</div>
         <aside className="overview-side">{['w-24', 'w-36', 'w-28', 'w-32'].map((width, i) => <section key={i}><Skeleton className="h-3 w-16" /><Skeleton className={`h-4 ${width}`} /></section>)}</aside>
       </div>
       : target.view === 'guide' ? <div className="guide-page">

@@ -5,7 +5,7 @@
 Pick the first layer that fits:
 
 1. **shadcn primitives** (`base-nova` style, built on Base UI) in `src/web/components/ui/`. When one is missing, add it with `pnpm dlx shadcn@latest add <name>` before building your own. Use Base UI directly only when shadcn has no wrapper for it.
-2. **App primitives** in `src/web/ui.tsx`: small, generic building blocks that compose shadcn parts and are reused across pages, such as `Tip` (tooltip with a delay variant and an optional hotkey), `Segmented`, `Switch`, `ResizeHandle` and `Avatar`. Add one here when the same pattern shows up in two places, or when a control is clearly generic. Keep app data types out of them.
+2. **App primitives** in `src/web/ui.tsx`: small, generic building blocks that compose shadcn parts and are reused across pages, such as `Tip` (tooltip with a delay variant and an optional hotkey), `Segmented`, `Switch` and `Avatar`. Add one here when the same pattern shows up in two places, or when a control is clearly generic. Keep app data types out of them.
 3. **Feature components** next to the feature (`pull.tsx`, `file-tree.tsx`, `comments.tsx`, …) for anything specific to one screen.
 
 Hand-style elements only when no primitive fits, such as the file and outline rows.
@@ -22,7 +22,8 @@ Use `Tip` from `src/web/ui.tsx`, never the `title` attribute.
 
 - `button.tsx` carries local font-size tweaks: when an install asks to overwrite it, set it aside and restore it afterwards.
 - `command.tsx` matches the selected row with `data-[selected=true]:` because cmdk writes `data-selected="false"` on every other row; keep that edit if the component is re-added.
-- `tooltip.tsx` is restyled light (popover colours, a ring and shadow, no arrow), and `kbd.tsx` drops the base-layer `kbd` border inside tooltips; keep both edits if either is re-added.
+- `tooltip.tsx` fits the available viewport width and is restyled light (popover colours, a ring and shadow, no arrow), and `kbd.tsx` drops the base-layer `kbd` border inside tooltips; keep both edits if either is re-added.
+- `sidebar.tsx` adds a resizable rail and remembers its width; preserve those edits if it is re-added.
 - New shadcn files sometimes import `cn` from `"cn"`; change it to `@/lib/utils`.
 
 ### Styling

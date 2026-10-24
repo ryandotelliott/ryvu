@@ -32,11 +32,11 @@ Each file starts with an H1 and a paragraph describing the user-visible behaviou
 ## Features
 
 - [Inbox and ⌘K](./inbox.md) (`journeys/inbox.mjs`): the PR list, tabs, the command palette, opening a PR.
-- [Diff files](./diff-files.md) (`journeys/diff-files.mjs`, `journeys/sticky-header.mjs`, `journeys/markdown-preview.mjs`): drawing diffs, the file sidebar, filtering, jumping, sticky headers, Reviewed, rendered Markdown with Mermaid and syntax highlighting.
+- [Diff files](./diff-files.md) (`journeys/diff-files.mjs`, `journeys/review-sidebar.mjs`, `journeys/file-progress.mjs`, `journeys/sticky-header.mjs`, `journeys/markdown-preview.mjs`): drawing diffs, the file sidebar, filtering, jumping, sticky headers, Reviewed, rendered Markdown with Mermaid and syntax highlighting.
 - [Find in diff](./find-in-diff.md) (`journeys/find.mjs`): ⌘F search, collapsed files, match highlighting.
-- [Comments](./comments.md) (`journeys/comments.mjs`): inline threads, the Comments list, jumping, display modes.
+- [Comments](./comments.md) (`journeys/comments.mjs`): inline threads, indicator popovers, and display modes.
 - [Guide](./guide.md) (`journeys/guide.mjs`): saved walkthroughs, file chips, section navigation.
 
-Cross-cutting journeys without a feature file: `scrolling` (popovers on sticky controls and independent sidebar scrolling), `navigation` (routes, links, history), `persistence` (a settings change and a pending comment across a reload), `security` (the local request rules), `lifecycle` and `dev-reload` (analysis jobs, shutdown and dev reloads, with the stand-in Codex). `SKILL.md` lists their preconditions.
+Cross-cutting journeys without a feature file: `tooltip-layout` (wrapped labels and viewport fitting), `scrolling` (popovers on sticky controls and independent sidebar scrolling), `navigation` (routes, links, history), `persistence` (a settings change and a pending comment across a reload), `security` (the local request rules), `lifecycle` and `dev-reload` (analysis jobs, shutdown and dev reloads, with the stand-in Codex). `SKILL.md` lists their preconditions.
 
 Not yet mapped: adding and reordering repositories in Settings, hidden-file patterns, expanding unchanged lines, display settings beyond comment mode, the Overview sidebar, and Submit review (writes to GitHub; verify against a throwaway PR only).

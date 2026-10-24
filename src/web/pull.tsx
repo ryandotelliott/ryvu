@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleX, Clock, ExternalLink, Eye, EyeOff, FileCode2, GitBranch, ListChecks, ListTree, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleX, Clock, ExternalLink, Eye, EyeOff, FileCode2, GitBranch, ListChecks, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
+import { SidebarGroup, SidebarGroupAction, SidebarGroupLabel, SidebarInset, useSidebar } from '@/components/ui/sidebar';
 import { addDraft, deleteDraft, replyToThread, submitReview as postReview, updateDraft } from '../pull.functions';
 import { agoLong, progressKey, readStored, useNow, writeStored } from './browser-state';
-import { Activity, CommentsMenu, ReviewMenu, Toast, type ComposerTarget, type ReviewApi } from './comments';
+import { Activity, ReviewMenu, Toast, type ComposerTarget, type ReviewApi } from './comments';
 import { DiffCard, DiffProvider, FileCount } from './diff';
 import { ChangedFileList, ChangedFileTree, FileDisplayMenu } from './file-tree';
 import { FindBar, findMatches, scrollToMatch, useFindHighlights } from './find';
@@ -17,7 +18,8 @@ import { clampFontSize, fontSizes, useDisplay, type DisplaySettings } from './di
 import { contains } from './fuzzy';
 import { matchesPattern, useHiddenFiles } from './file-filters';
 import { homeLink, pullLink, type PullViewName } from './links';
-import { Avatar, CheckRow, focusOnKeyboardOpen, Kbd, PullIcon, RadioRows, RepoSwatch, ResizeHandle, Tip } from './ui';
+import { Avatar, CheckRow, focusOnKeyboardOpen, Kbd, PullIcon, RadioRows, RepoSwatch, Tip } from './ui';
+import { AppSidebar, SidebarToggle } from './shell';
 import { inline, Markdown } from './markdown';
 import { fileAnchor, ReviewContext, scrollPageBy, splitPath } from './pull-page';
 import type { ChangedFile, Chapter, PullDetail, Reference, ReviewEvent, Snapshot } from '../types';
@@ -26,8 +28,7 @@ import type { ChangedFile, Chapter, PullDetail, Reference, ReviewEvent, Snapshot
 const topbar = 48, toolbar = 44, initiallyOpen = 12;
 type DiffView = Exclude<PullViewName, 'overview'>;
 const views: [PullViewName, string][] = [['overview', 'Overview'], ['guide', 'Guide'], ['diff', 'Diff']];
-const treeKey = 'pr-guide:file-tree', orderKey = 'pr-guide:file-order', treeWidthKey = 'pr-guide:file-tree-width', findCollapsedKey = 'pr-guide:find-collapsed';
-const treeWidths = { min: 220, initial: 300, max: 520 };
+const orderKey = 'pr-guide:file-order', findCollapsedKey = 'pr-guide:find-collapsed';
 // Jumps instantly, then re-aligns while the diff virtualizer swaps estimated heights for measured ones above the target.
 function scrollToElement(target: string | (() => Element | null), offset: number, center = false) {
   let frames = 0, settled = 0;
@@ -61,10 +62,12 @@ function seekComment(anchor: string, fileId: string, offset: number) {
   step();
 }
 
-export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze, color }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void; color: string }) {
+export function PullView({ detail, onDetail, view, navigation, status, analyzing, onAnalyze, color }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; navigation: ComponentProps<typeof AppSidebar>; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void; color: string }) {
   const { snapshot, guide: review, conversation, drafts } = detail, guide = review?.guide ?? null;
   const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`, number = snapshot.identity.number, pullKey = `${repo.toLowerCase()}#${number}`;
   const [display, setDisplay, resetDisplay] = useDisplay(), navigate = useNavigate();
+  const { isMobile, open: sidebarOpen, openMobile, setOpen: setSidebarOpen, setOpenMobile, toggleSidebar } = useSidebar();
+  const sidebarVisible = isMobile ? openMobile : sidebarOpen;
   const viewedKey = `pr-guide:viewed:${pullKey}@${snapshot.headSHA}`;
   // Files matching a hidden pattern stay out of the Diff page's list, diffs and totals.
   const hidden = useHiddenFiles(repo), patterns = hidden.enabled ? hidden.patterns : [];
@@ -80,22 +83,21 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     const firstChapter = chapters.find(chapter => unread(chapter.files).length);
     return { diff: unread(shown.map(file => file.path)).slice(0, initiallyOpen), guide: firstChapter ? unread(firstChapter.files).slice(0, 1) : [] };
   });
-  const [filter, setFilter] = useState(''), [tree, setTree] = useState(() => readStored<unknown>(treeKey, false) === true), [current, setCurrent] = useState(0);
+  const [filter, setFilter] = useState(''), [filterOpen, setFilterOpen] = useState(false), [current, setCurrent] = useState(0);
   const [previewed, setPreviewed] = useState<string[]>([]);
   const setFilePreview = useCallback((path: string, preview: boolean) => setPreviewed(previous => preview ? [...new Set([...previous, path])] : previous.filter(value => value !== path)), []);
   const [selected, setSelected] = useState<Reference | null>(null), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
   // A jump focuses one comment. Focus belongs to the comment mode it was set in, so switching modes never opens a popover on its own.
-  const [focused, setFocused] = useState<{ anchor: string; mode: string } | null>(null), diffBody = useRef<HTMLDivElement>(null);
+  const [focused, setFocused] = useState<{ anchor: string; mode: string } | null>(null);
   const focus = focused?.mode === display.comments ? focused.anchor : null;
   const setFocus = useCallback((anchor: string | null) => setFocused(anchor ? { anchor, mode: display.comments } : null), [display.comments]);
-  const filterInput = useRef<HTMLInputElement>(null), limitationsRef = useRef<HTMLDetailsElement>(null);
+  const filterInput = useRef<HTMLInputElement>(null), filterButton = useRef<HTMLButtonElement>(null), limitationsRef = useRef<HTMLDetailsElement>(null), fileSidebar = useRef<HTMLDivElement>(null);
+  function searchFiles() { if (isMobile) setOpenMobile(true); else setSidebarOpen(true); setFilterOpen(true); requestAnimationFrame(() => filterInput.current?.focus()); }
+  function closeFileSearch() { setFilter(''); setFilterOpen(false); filterButton.current?.focus(); }
   const done = useMemo(() => chapters.filter(chapter => chapter.files.every(path => viewed.includes(path))).map(chapter => chapter.id), [chapters, viewed]);
   useEffect(() => { writeStored(viewedKey, viewed); }, [viewed, viewedKey]);
   useEffect(() => { if (review) writeStored(progressKey(review.key), done); }, [done, review?.key]);
-  const [treeWidth, setTreeWidth] = useState(() => { const stored = readStored<unknown>(treeWidthKey, treeWidths.initial); return typeof stored === 'number' ? Math.min(treeWidths.max, Math.max(treeWidths.min, stored)) : treeWidths.initial; });
-  useEffect(() => { writeStored(treeWidthKey, treeWidth); }, [treeWidth]);
-  const [order, setOrder] = useState<'tree' | 'diff'>(() => readStored<unknown>(orderKey, 'diff') === 'tree' ? 'tree' : 'diff');
-  useEffect(() => { writeStored(treeKey, tree); }, [tree]);
+  const [order, setOrder] = useState<'tree' | 'diff'>(() => readStored<unknown>(orderKey, 'tree') === 'tree' ? 'tree' : 'diff');
   useEffect(() => { writeStored(orderKey, order); }, [order]);
   // Where content lands below the sticky bars: 16px under them, matching --sticky-top in style.css.
   const offset = view === 'diff' ? topbar + toolbar + 16 : topbar + 16;
@@ -106,28 +108,28 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], [role="dialog"]')) return;
       const index = ['1', '2', '3'].indexOf(event.key);
       if (index !== -1) { event.preventDefault(); void navigate(pullLink(repo, number, views[index][0])); return; }
-      if ((event.key === 'f' || event.key === 'F') && view === 'diff') { event.preventDefault(); setTree(value => !value); return; }
-      if (event.key === '/' && view === 'diff') { event.preventDefault(); setTree(true); requestAnimationFrame(() => filterInput.current?.focus()); return; }
+      if (event.key === 'f' || event.key === 'F') { event.preventDefault(); toggleSidebar(); return; }
+      if (event.key === '/') { event.preventDefault(); searchFiles(); return; }
       if ((event.key !== 'j' && event.key !== 'k') || !items.length) return;
       let at = -1;
       items.forEach((id, i) => { const top = document.getElementById(id)?.getBoundingClientRect().top ?? Infinity; if (top <= offset + 2) at = i; });
       event.preventDefault(); scrollToElement(items[Math.min(items.length - 1, Math.max(0, event.key === 'j' ? at + 1 : at - 1))], offset);
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, [items.join('|'), view, offset]);
+  }, [items.join('|'), view, offset, toggleSidebar, isMobile, setOpenMobile, setSidebarOpen]);
   useEffect(() => {
     // Tracks which section or file is being read, for the section rail and file tree.
     let frame = 0;
     const update = () => {
       frame = 0; let index = 0; items.forEach((id, i) => { const top = document.getElementById(id)?.getBoundingClientRect().top ?? Infinity; if (top <= offset + 8) index = i; }); setCurrent(index);
-      // How far the reading line has moved through the current file; the sidebar row fills to match. Set directly to skip a render per frame.
       const box = document.getElementById(items[index])?.getBoundingClientRect();
-      if (box && diffBody.current) diffBody.current.style.setProperty('--file-progress', String(Math.min(1, Math.max(0, (offset - box.top) / Math.max(1, box.height)))));
+      const progress = view === 'diff' && box ? Math.min(1, Math.max(0, (offset - box.top) / Math.max(1, box.height))) : 1;
+      fileSidebar.current?.style.setProperty('--file-progress', String(progress));
     };
     const onScroll = () => { frame ||= requestAnimationFrame(update); };
     update(); window.addEventListener('scroll', onScroll, { passive: true });
     return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(frame); };
-  }, [items.join('|'), offset]);
+  }, [items.join('|'), offset, view, sidebarVisible]);
   const files = new Map(snapshot.files.map(file => [file.path, file]));
   const setFileViewed = useCallback((paths: string[], value: boolean) => {
     setViewed(previous => value ? [...new Set([...previous, ...paths])] : previous.filter(path => !paths.includes(path)));
@@ -138,11 +140,12 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
   const diffView: DiffView = view === 'guide' ? 'guide' : 'diff';
   const toggle = useCallback((path: string) => setOpen(previous => ({ ...previous, [diffView]: previous[diffView].includes(path) ? previous[diffView].filter(value => value !== path) : [...previous[diffView], path] })), [diffView]);
   function pickFile(path: string) {
-    setOpen(previous => ({ ...previous, [diffView]: [...new Set([...previous[diffView], path])] }));
-    if (view === 'overview') void navigate(pullLink(repo, number, 'diff'));
-    if (view === 'guide') { setFilePreview(path, false); setSelected(guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path) ?? null); }
-    if (window.matchMedia('(max-width: 900px)').matches) setTree(false);
-    requestAnimationFrame(() => scrollToElement(fileAnchor(path), offset, view === 'guide'));
+    const targetView = view === 'guide' && chapters.some(chapter => chapter.files.includes(path)) ? 'guide' : 'diff';
+    setOpen(previous => ({ ...previous, [targetView]: [...new Set([...previous[targetView], path])] }));
+    if (view !== targetView) void navigate(pullLink(repo, number, targetView));
+    if (targetView === 'guide') { setFilePreview(path, false); setSelected(guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path) ?? null); }
+    if (isMobile) setOpenMobile(false);
+    requestAnimationFrame(() => scrollToElement(fileAnchor(path), targetView === 'diff' ? topbar + toolbar + 16 : topbar + 16, targetView === 'guide'));
   }
   function goToChapter(chapter: Chapter, expand = true) {
     const path = chapter.files.find(value => !viewed.includes(value));
@@ -163,24 +166,22 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
     onDetail(d => ({ ...d, conversation: result.conversation, drafts: result.drafts }));
     setToast(event === 'APPROVE' ? 'Approved on GitHub' : event === 'REQUEST_CHANGES' ? 'Changes requested on GitHub' : 'Review submitted to GitHub');
   }
-  function jumpToComment(anchor: string, path: string) {
-    setFilePreview(path, false);
-    setFocus(anchor);
-    // Threads on lines no longer in the diff have nowhere to show in the code; they're in the Overview's activity.
-    const thread = conversation.threads.find(item => `thread-${item.id}` === anchor);
-    if (thread && (thread.outdated || thread.line === null)) { if (view !== 'overview') void navigate(pullLink(repo, number)); requestAnimationFrame(() => scrollToElement(`activity-${anchor}`, topbar + 16, true)); return; }
-    if (!shown.some(file => file.path === path)) hidden.setEnabled(false);
-    setOpen(previous => ({ ...previous, diff: [...new Set([...previous.diff, path])] }));
+  const showDrafts = () => {
+    const first = drafts[0];
+    if (!first) return;
+    setFilePreview(first.path, false);
+    setFocus(`draft-${first.id}`);
+    if (!shown.some(file => file.path === first.path)) hidden.setEnabled(false);
+    setOpen(previous => ({ ...previous, diff: [...new Set([...previous.diff, first.path])] }));
     if (view !== 'diff') void navigate(pullLink(repo, number, 'diff'));
-    requestAnimationFrame(() => seekComment(anchor, fileAnchor(path), topbar + toolbar + 16));
-  }
-  const showDrafts = () => { const first = drafts[0]; if (first) { setFilePreview(first.path, false); if (view !== 'diff') void navigate(pullLink(repo, number, 'diff')); requestAnimationFrame(() => pickFile(first.path)); } };
+    requestAnimationFrame(() => seekComment(`draft-${first.id}`, fileAnchor(first.path), topbar + toolbar + 16));
+  };
   const limitations = [...snapshot.warnings, ...(guide?.limitations ?? []), ...(guide?.omissions.map(o => `${o.path}: ${o.reason}`) ?? [])];
   const changedFiles = shown.filter(file => contains(filter, file.path));
   const additions = shown.reduce((sum, file) => sum + file.additions, 0), deletions = shown.reduce((sum, file) => sum + file.deletions, 0);
   // Changed lines in visible files you haven't marked reviewed.
   const linesLeft = shown.filter(file => !viewed.includes(file.path)).reduce((sum, file) => sum + file.additions + file.deletions, 0);
-  const currentPath = shown[current]?.path ?? null;
+  const currentPath = view === 'diff' ? shown[current]?.path ?? null : view === 'guide' ? chapters[current]?.files[0] ?? null : null;
   // Expand and collapse act on the files of the page you're on, skipping hidden ones.
   const pageFiles = view === 'guide' ? chapters.flatMap(chapter => chapter.files) : shown.map(file => file.path);
   // ⌘F searches the diffs on this page. Collapsed files are searched only when that toggle is on; a match in one opens it.
@@ -219,17 +220,30 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
   });
   const displayMenu = <DisplayMenu positionMethod={view === 'diff' ? 'fixed' : undefined} display={display} onChange={setDisplay} onReset={resetDisplay} onExpand={() => setOpen(previous => ({ ...previous, [diffView]: pageFiles }))} onCollapse={() => setOpen(previous => ({ ...previous, [diffView]: [] }))} />;
   const heading = <PullHeading snapshot={snapshot} color={color} />;
-  return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={reviewApi}><div className={`pr-page view-${view}`}>
+  return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={reviewApi}>
+    <AppSidebar {...navigation}>
+      <SidebarGroup ref={fileSidebar} className="file-tree min-h-0 flex-1" aria-label="Files">
+        <SidebarGroupLabel>Files <span className="ml-2 tabular-nums">{shown.length}</span></SidebarGroupLabel>
+        <Tip content="Search files" hotkey="/" side="bottom"><SidebarGroupAction ref={filterButton} className="right-10" aria-label="Search files" aria-expanded={filterOpen} onClick={() => filterOpen ? closeFileSearch() : searchFiles()}><Search /></SidebarGroupAction></Tip>
+        <FileDisplayMenu order={order} onOrder={setOrder} hidden={hidden} files={snapshot.files} trigger={<SidebarGroupAction aria-label="File list display" />} />
+        {filterOpen && <div className="pb-2"><InputGroup className="bg-card"><InputGroupAddon><Search /></InputGroupAddon><InputGroupInput ref={filterInput} value={filter} onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); closeFileSearch(); } }} placeholder="Filter files" aria-label="Filter files" spellCheck={false} /><InputGroupAddon align="inline-end"><Kbd>/</Kbd></InputGroupAddon></InputGroup></div>}
+        {order === 'tree' ? <ChangedFileTree key={patterns.join('\n')} files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />
+          : <ChangedFileList files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />}
+        {!changedFiles.length && <p className="outline-empty">{filter ? `No files match “${filter}”.` : 'Every file is hidden.'}</p>}
+        {filteredCount > 0 && <Tip content={hidden.enabled ? 'Show them' : 'Hide them'} delay="long"><button type="button" className="hidden-note" onClick={() => hidden.setEnabled(!hidden.enabled)}>{hidden.enabled ? <EyeOff size={13} /> : <Eye size={13} />}{filteredCount} filtered {filteredCount === 1 ? 'file' : 'files'} {hidden.enabled ? 'hidden' : 'visible'}</button></Tip>}
+      </SidebarGroup>
+    </AppSidebar>
+    <SidebarInset className={`pr-page view-${view} min-w-0`} data-sidebar-open={sidebarVisible && !isMobile}>
     <header className="pr-topbar">
+      <SidebarToggle label={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'} hotkey="F" />
       <Tip content="Pull requests" side="bottom"><Link {...homeLink()} className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} aria-label="Pull requests"><ArrowLeft /></Link></Tip>
       <Tip content={`${repo} #${number}: ${snapshot.title}`} delay="long" side="bottom"><span className="topbar-title"><span className="topbar-number">#{number}</span><span>{snapshot.title}</span></span></Tip>
       <nav className="view-tabs" aria-label="View">{views.map(([name, label], i) => <Tip key={name} content={label} hotkey={String(i + 1)} delay="long" side="bottom"><Link {...pullLink(repo, number, name)} className={view === name ? 'is-active' : ''} aria-current={view === name ? 'page' : undefined}>{label}{name === 'guide' && analyzing && <LoaderCircle size={12} className="spinner" />}</Link></Tip>)}</nav>
       <div className="topbar-actions">
-        <CommentsMenu threads={conversation.threads} drafts={drafts} files={snapshot.files.map(file => file.path)} onJump={jumpToComment} />
         <ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />
       </div>
     </header>
-    {view === 'overview' ? <OverviewView detail={detail} heading={heading} viewed={viewed} onFile={pickFile} />
+    {view === 'overview' ? <OverviewView detail={detail} heading={heading} onFile={pickFile} />
       : view === 'guide' ? <div className="guide-page">
         <div className="guide-head">
           {heading}
@@ -253,28 +267,18 @@ export function PullView({ detail, onDetail, view, status, analyzing, onAnalyze,
       </div>
       : <div className="diff-page">
         <div className="diff-toolbar">
-          <Tip content={tree ? 'Hide files' : 'Show files'} hotkey="F" side="bottom"><Button variant={tree ? 'secondary' : 'ghost'} size="sm" aria-pressed={tree} onClick={() => setTree(value => !value)}><ListTree />Files</Button></Tip>
           <span className="toolbar-stat"><span className="added">+{additions.toLocaleString()}</span><span className="removed">−{deletions.toLocaleString()}</span></span>
           <span className="toolbar-progress">{shown.filter(file => viewed.includes(file.path)).length}/{shown.length} reviewed</span>
           <span className="toolbar-actions"><span className="toolbar-progress">{linesLeft.toLocaleString()} {linesLeft === 1 ? 'line' : 'lines'} left</span>{displayMenu}</span>
         </div>
-        <div ref={diffBody} className={`diff-body ${tree ? 'with-tree' : ''}`} style={{ '--tree-width': `${treeWidth}px` } as CSSProperties}>
-          {tree && <aside className="file-tree" aria-label="Files">
-            <div className="file-tree-head"><InputGroup className="bg-card"><InputGroupAddon><Search /></InputGroupAddon><InputGroupInput ref={filterInput} value={filter} onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { setFilter(''); e.currentTarget.blur(); } }} placeholder="Filter files" aria-label="Filter files" spellCheck={false} /><InputGroupAddon align="inline-end"><Kbd>/</Kbd></InputGroupAddon></InputGroup><FileDisplayMenu order={order} onOrder={setOrder} hidden={hidden} files={snapshot.files} /><Button variant="ghost" size="icon" className="file-tree-close" aria-label="Close files" onClick={() => setTree(false)}><X /></Button></div>
-            {order === 'tree' ? <ChangedFileTree key={patterns.join('\n')} files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />
-              : <ChangedFileList files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />}
-            {!changedFiles.length && <p className="outline-empty">{filter ? `No files match “${filter}”.` : 'Every file is hidden.'}</p>}
-            {filteredCount > 0 && <Tip content={hidden.enabled ? 'Show them' : 'Hide them'} delay="long"><button type="button" className="hidden-note" onClick={() => hidden.setEnabled(!hidden.enabled)}>{hidden.enabled ? <EyeOff size={13} /> : <Eye size={13} />}{filteredCount} filtered {filteredCount === 1 ? 'file' : 'files'} {hidden.enabled ? 'hidden' : 'visible'}</button></Tip>}
-            <ResizeHandle className="file-tree-resize" label="Resize files sidebar" value={treeWidth} min={treeWidths.min} max={treeWidths.max} onChange={setTreeWidth} onReset={() => setTreeWidth(treeWidths.initial)} />
-          </aside>}
-          {tree && <div className="file-tree-scrim" onClick={() => setTree(false)} />}
+        <div className="diff-body">
           <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} reference={null} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
         </div>
       </div>}
     {find.open && view !== 'overview' && <FindBar query={find.query} onQuery={query => setFind(previous => ({ ...previous, query, index: 0 }))} count={matches.length} current={findIndex} onStep={stepMatch}
       includeCollapsed={includeCollapsed} onIncludeCollapsed={setIncludeCollapsed} onClose={() => setFind(previous => ({ ...previous, open: false }))} focusKey={find.focus} />}
     {toast && <Toast message={toast} onDone={() => setToast('')} />}
-  </div></ReviewContext.Provider></DiffProvider>;
+  </SidebarInset></ReviewContext.Provider></DiffProvider>;
 }
 
 function PullHeading({ snapshot, color }: { snapshot: Snapshot; color: string }) {
@@ -296,8 +300,8 @@ const reviewTone: Record<string, { label: string; icon: ReactNode; tone: string 
   REQUESTED: { label: 'Requested', icon: <Clock size={13} />, tone: 'requested' }
 };
 const checkLabels = { success: ['All passed', <ListChecks size={14} />], failure: ['Failing', <CircleX size={14} />], pending: ['Running', <Clock size={14} />] } as const;
-function OverviewView({ detail, heading, viewed, onFile }: { detail: PullDetail; heading: ReactNode; viewed: string[]; onFile: (path: string) => void }) {
-  const { snapshot, guide: review, status, conversation, viewer } = detail, guide = review?.guide ?? null;
+function OverviewView({ detail, heading, onFile }: { detail: PullDetail; heading: ReactNode; onFile: (path: string) => void }) {
+  const { snapshot, guide: review, status, conversation, viewer } = detail;
   // One row per reviewer: a pending request wins, then their last approval or change request, then a comment.
   const reviewers = new Map<string, { name: string; team: boolean; state: string }>();
   for (const item of [...conversation.reviews].sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))) {
@@ -310,19 +314,15 @@ function OverviewView({ detail, heading, viewed, onFile }: { detail: PullDetail;
   const state = snapshot.state === 'merged' ? 'Merged' : snapshot.state === 'closed' ? 'Closed' : snapshot.draft ? 'Draft' : 'Open';
   const base = snapshot.baseRef || 'base';
   const merge = status?.merge ? { behind: `Behind ${base}`, conflicts: 'Has conflicts', blocked: 'Waiting on requirements', unstable: 'Checks not passing', clean: `Up to date with ${base}` }[status.merge] : null;
-  const grouped = new Set(guide?.chapters.flatMap(chapter => chapter.files));
-  const groups = guide ? [...guide.chapters.map(chapter => ({ title: chapter.title, files: chapter.files })), ...(snapshot.files.some(file => !grouped.has(file.path)) ? [{ title: 'Other files', files: snapshot.files.filter(file => !grouped.has(file.path)).map(file => file.path) }] : [])] : null;
-  const fileButton = (path: string) => { const { name, directory } = splitPath(path), read = viewed.includes(path), file = snapshot.files.find(candidate => candidate.path === path); return <Tip key={path} content={path} delay="long" side="left"><button type="button" className={`side-file ${read ? 'is-read' : ''}`} onClick={() => onFile(path)}>{read ? <Check size={12} className="read-icon" /> : <FileCode2 size={12} />}<span className="filename">{name}</span><span className="directory">{directory}</span>{file && <FileCount file={file} />}</button></Tip>; };
-  const stats = (paths: string[]) => { const list = paths.map(path => snapshot.files.find(file => file.path === path)).filter((file): file is ChangedFile => Boolean(file)); return <span className="file-count"><span className="added">+{list.reduce((sum, file) => sum + file.additions, 0).toLocaleString()}</span><span className="removed">−{list.reduce((sum, file) => sum + file.deletions, 0).toLocaleString()}</span></span>; };
   return <div className="overview-layout">
-    <main className="overview-main">
+    <div className="overview-main">
       {heading}
       <details className="description" open>
         <summary>Description<ChevronDown size={12} className="chevron" /></summary>
         {snapshot.body.trim() ? <Markdown className="description-text" text={snapshot.body} /> : <p className="description-text is-empty">No description provided.</p>}
       </details>
       <Activity conversation={conversation} opened={{ author: snapshot.author, at: snapshot.createdAt ?? '', commits: status?.commits ?? 0 }} onFile={onFile} />
-    </main>
+    </div>
     <aside className="overview-side" aria-label="Details">
       <section><h4>Status</h4><div className="side-row"><PullIcon draft={snapshot.draft} state={snapshot.state} size={15} /><span>{state}</span>{waiting && <span className="side-chip">Waiting for your review</span>}</div></section>
       <section><h4>Reviewers</h4>{reviewers.size ? [...reviewers.values()].map(reviewer => { const tone = reviewTone[reviewer.state] ?? reviewTone.COMMENTED; return <div key={reviewer.name} className="side-row">
@@ -330,13 +330,6 @@ function OverviewView({ detail, heading, viewed, onFile }: { detail: PullDetail;
       </div>; }) : <p className="side-empty">No reviewers yet</p>}</section>
       {status?.checks && <section><h4>Checks</h4><div className={`side-row checks-${status.checks}`}>{checkLabels[status.checks][1]}<span>{checkLabels[status.checks][0]}</span></div></section>}
       {merge && <section><h4>Branch</h4><div className={`side-row merge-${status!.merge}`}><GitBranch size={14} /><span>{merge}</span></div></section>}
-      <section>
-        <div className="side-files-head"><h4>{snapshot.files.length} {snapshot.files.length === 1 ? 'file' : 'files'} changed</h4>{stats(snapshot.files.map(file => file.path))}</div>
-        {groups ? groups.map(group => <details key={group.title} className="side-group" open>
-          <summary><span className="side-group-title">{group.title}</span><span className="side-count">{group.files.length}</span><ChevronDown size={12} className="chevron" />{stats(group.files)}</summary>
-          <div className="side-files">{group.files.map(fileButton)}</div>
-        </details>) : <div className="side-files">{snapshot.files.map(file => fileButton(file.path))}</div>}
-      </section>
       <p className="side-footer">Head {snapshot.headSHA.slice(0, 7)}{review ? ` · guide by ${review.model}` : ''}</p>
     </aside>
   </div>;

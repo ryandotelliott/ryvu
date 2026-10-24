@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { GitPullRequest, Plus, Search, Settings as SettingsIcon } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { ChevronRight, GitPullRequest, Plus, Search, Settings as SettingsIcon } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarRail, SidebarSeparator, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { homeLink, settingsLink } from './links';
 import { Kbd, RepoSwatch, Tip, repoColor } from './ui';
 import type { Settings } from '../types';
@@ -9,31 +10,60 @@ import type { Settings } from '../types';
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 export const commandKey = isMac ? '⌘' : 'Ctrl ';
 
-export function AppShell({ active, settings, repoCounts, selectedRepo, onSearch, children }: { active: 'home' | 'settings'; settings: Settings | null; repoCounts: Record<string, number> | null; selectedRepo?: string; onSearch: () => void; children: ReactNode }) {
+type NavigationProps = { active?: 'home' | 'settings'; settings: Settings | null; repoCounts: Record<string, number> | null; selectedRepo?: string; onSearch: () => void };
+
+export function SidebarToggle({ label = 'Toggle sidebar', hotkey = `${commandKey}B`, className }: { label?: string; hotkey?: string; className?: string }) {
+  return <Tip content={label} hotkey={hotkey} side="bottom"><SidebarTrigger aria-label={label} className={className} /></Tip>;
+}
+
+export function AppSidebar({ active, settings, repoCounts, selectedRepo, onSearch, children }: NavigationProps & { children?: ReactNode }) {
   const total = repoCounts ? Object.values(repoCounts).reduce((sum, count) => sum + count, 0) : null;
-  return <div className="app-shell">
-    <aside className="app-sidebar" aria-label="Main">
-      <div className="brand">PR Guide</div>
-      <Button variant="outline" className="w-full justify-start font-normal text-muted-foreground" onClick={onSearch}><Search /><span className="flex-1 text-left">Find a pull request</span><Kbd>{commandKey}K</Kbd></Button>
-      <nav className="sidebar-nav">
-        <Link {...homeLink()} className={active === 'home' && !selectedRepo ? 'is-active' : ''} aria-current={active === 'home' && !selectedRepo ? 'page' : undefined}><GitPullRequest size={14} /><span>Pull requests</span>{total !== null && <span className="nav-count">{total}</span>}</Link>
-        <Link {...settingsLink} className={active === 'settings' ? 'is-active' : ''} aria-current={active === 'settings' ? 'page' : undefined}><SettingsIcon size={14} /><span>Settings</span></Link>
-      </nav>
-      <div className="sidebar-repos">
-        <span className="sidebar-label">Repositories</span>
-        {settings?.repos.map(repo => <Tip key={repo} content={repo} delay="long" side="right"><Link {...homeLink({ repo })} className={selectedRepo === repo ? 'is-active' : ''}>
-          <RepoSwatch color={repoColor(settings.repos, repo)} /><span className="repo-name">{repo}</span>{repoCounts?.[repo] !== undefined && <span className="nav-count">{repoCounts[repo]}</span>}
-        </Link></Tip>)}
-        <Link {...settingsLink} className="add-repo-link"><Plus size={12} /><span>Add repository</span></Link>
+  const { setOpenMobile } = useSidebar(), closeMobile = () => setOpenMobile(false);
+  return <Sidebar aria-label={children ? 'Review sidebar' : 'Main'}>
+    <SidebarHeader>
+      <div className="flex items-center">
+        <SidebarMenu><SidebarMenuItem><SidebarMenuButton variant="outline" onClick={onSearch}><Search /><span className="min-w-0 flex-1 truncate">Find a pull request</span><Kbd>{commandKey}K</Kbd></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
+        <SidebarToggle label="Close sidebar" className="md:hidden" />
       </div>
-    </aside>
-    <div className="mobile-header">
-      <Link {...homeLink()} className="brand">PR Guide</Link>
-      <div className="mobile-header-actions">
-        <Button variant="ghost" size="icon" aria-label="Find a pull request" onClick={onSearch}><Search size={17} /></Button>
-        <Link {...settingsLink} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label="Settings"><SettingsIcon size={17} /></Link>
+    </SidebarHeader>
+    <SidebarContent className={children ? 'overflow-hidden' : undefined}>
+      <div className={children ? 'max-h-[45svh] shrink-0 overflow-y-auto overscroll-contain' : undefined}>
+        <SidebarGroup aria-label="Navigation"><SidebarGroupContent><SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton render={<Link {...homeLink()} />} onClick={closeMobile} isActive={active === 'home' && !selectedRepo}><GitPullRequest /><span>Pull requests</span></SidebarMenuButton>
+            {total !== null && <SidebarMenuBadge>{total}</SidebarMenuBadge>}
+          </SidebarMenuItem>
+        </SidebarMenu></SidebarGroupContent></SidebarGroup>
+        <Collapsible defaultOpen><SidebarGroup>
+          <SidebarGroupLabel render={<CollapsibleTrigger />} className="[&[data-panel-open]>svg]:rotate-90"><span>Repositories</span><ChevronRight className="ml-auto transition-transform" /></SidebarGroupLabel>
+          <CollapsibleContent><SidebarGroupContent><SidebarMenu>
+            {settings?.repos.map(repo => <SidebarMenuItem key={repo}>
+              <Tip content={repo} delay="long" side="right"><SidebarMenuButton render={<Link {...homeLink({ repo })} />} onClick={closeMobile} isActive={selectedRepo === repo}>
+                <RepoSwatch color={repoColor(settings.repos, repo)} /><span>{repo}</span>
+              </SidebarMenuButton></Tip>
+              {repoCounts?.[repo] !== undefined && <SidebarMenuBadge>{repoCounts[repo]}</SidebarMenuBadge>}
+            </SidebarMenuItem>)}
+            <SidebarMenuItem><SidebarMenuButton render={<Link {...settingsLink} />} onClick={closeMobile}><Plus /><span>Add repository</span></SidebarMenuButton></SidebarMenuItem>
+          </SidebarMenu></SidebarGroupContent></CollapsibleContent>
+        </SidebarGroup></Collapsible>
       </div>
-    </div>
-    <main className="app-main">{children}</main>
-  </div>;
+      {children && <><SidebarSeparator />{children}</>}
+    </SidebarContent>
+    <SidebarFooter>
+      <SidebarMenu><SidebarMenuItem>
+        <Tip content="Settings" side="right"><SidebarMenuButton render={<Link {...settingsLink} />} onClick={closeMobile} isActive={active === 'settings'} aria-label="Settings" className="size-8 justify-center p-0"><SettingsIcon /></SidebarMenuButton></Tip>
+      </SidebarMenuItem></SidebarMenu>
+    </SidebarFooter>
+    <Tip content="Drag to resize; double-click to reset" side="right"><SidebarRail /></Tip>
+  </Sidebar>;
+}
+
+export function AppShell({ children, ...navigation }: NavigationProps & { children: ReactNode }) {
+  return <>
+    <AppSidebar {...navigation} />
+    <SidebarInset className="min-w-0">
+      <header className="flex h-12 shrink-0 items-center border-b px-3"><SidebarToggle /></header>
+      {children}
+    </SidebarInset>
+  </>;
 }

@@ -1,37 +1,35 @@
 # Comments
 
-Open review threads show in the code. The Comments list (`C`) lists every thread by file and line, folds resolved ones into a section, and jumps to a thread. Display settings switch threads between inline, right-side indicators and hidden.
+Open review threads show under their code lines. Display settings switch threads between inline cards, right-side indicators, and hidden. The Review menu opens the summary and verdict form, with a link to local pending comments.
 
 ## Sub-features
 
-- `threads-inline` shows unresolved threads on current lines as foldable cards; resolved and outdated threads stay off the file.
-- `comments-list` opens with `C` (toggle) or the top-bar comments button.
-- `comments-jump` scrolls to a thread and highlights it (outdated threads open the Overview instead).
+- `threads-inline` shows unresolved threads on current lines as foldable cards.
 - `comments-indicators` replaces inline threads with markers that open a popover.
-- `comments-hidden` removes threads from the code; jumping to one reveals just that thread.
+- `comments-hidden` removes threads from the code.
+- `review-menu` opens the review form and jumps to pending comments. The final Submit review action writes to GitHub.
 
 ## How to get to it (user POV)
 
-- Open a PR's Diff tab; threads appear under their lines.
-- Press `c`, or click the speech-bubble button with the count in the top bar.
-- Display settings (sliders icon, right of "lines left") → Comment location → Inline / Indicators / Hidden.
+- Open a PR's Diff tab and select a file with threads.
+- Display settings → Comment location → Inline / Indicators / Hidden.
+- Click Review in the top bar; its chevron indicates an expandable form.
 
 ## Driving it with Playwright
 
 Preconditions:
 
 - A PR with an unresolved thread on a line still in the diff; `pickPullWithOpenThread` scans the first ten inbox PRs.
-- Never click Reply, Add to review or Submit review.
+- Never click Reply or Submit review. Add to review stores a local draft only.
 
-- **List.** `go('/pr/…/diff')`, `waitForDiffRows()`, click the page body, press `c`. `.comments-menu` lists at least as many `.comments-menu-item` rows as open threads.
-- **Jump.** Click the first item. A `.comment-fold.is-focused` sits on screen (between 100px and 900px).
+- **Inline.** Select the thread's file through file search, then scroll until its comment link and author from GitHub are visible.
 - **Indicators.** Display settings → radio `Indicators`, Escape. `.comment-indicator` exists and `.comment-fold` is gone.
 - **Hidden.** Display settings → radio `Hidden`, Escape. Neither exists. Restore `Inline`.
-- **Proof.** Screenshots of the list, the focused thread and indicator mode.
+- **Review.** `review-sidebar` opens and dismisses Review. `markdown-preview` uses Review → pending comments to reveal a local draft, then deletes it without submitting.
+- **Proof.** Screenshots of the inline thread and indicator mode.
 
 ## Gotchas
 
-- `c` is ignored while typing in an input; click the page body first.
-- Display settings persist in localStorage; each `drive.mjs` run starts with a fresh profile, but reset to `Inline` when you finish.
-- The PR with open threads changes as threads get resolved; the journey fails with a clear message when none of the first ten PRs has one.
-- Jumping is a scroll the diff virtualizer must hear about; a regression here shows as a blank card where the thread should be.
+- Display settings persist in localStorage; each `drive.mjs` run starts with a fresh profile. Restore `Inline` when finished.
+- The PR with open threads changes as threads get resolved; the journey fails when none of the first ten PRs has a drawable thread.
+- Code and comments are virtualized; selecting a file is not enough to prove that a thread is drawn.

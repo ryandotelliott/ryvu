@@ -76,8 +76,8 @@ export default async function (ctx) {
   await card.getByRole('button', { name: 'Add to review', exact: true }).click();
   await card.locator('.thread', { hasText: draft }).waitFor();
   await preview.click(); await card.locator('.markdown-file-preview h1').waitFor();
-  await page.getByRole('button', { name: /^\d+ comments$/ }).click();
-  await page.locator('.comments-menu-item').filter({ hasText: draft }).click();
+  await page.getByRole('button', { name: 'Review', exact: true }).click();
+  await page.getByRole('button', { name: /^\d+ pending comments?$/ }).click();
   await card.locator('.thread', { hasText: draft }).waitFor();
   ctx.check(await toggle.getAttribute('aria-pressed') === 'false', 'jumping to a comment exits Preview and shows its diff');
   await card.locator('.thread', { hasText: draft }).getByRole('button', { name: 'Delete comment' }).click();

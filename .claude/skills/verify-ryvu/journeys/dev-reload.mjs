@@ -94,8 +94,8 @@ export default async function (ctx) {
     const other = (await ctx.inbox()).find(pull => pull.path !== target);
     ctx.check(other, `the inbox has a PR besides ${target} to analyze while the runtime closes`);
     await page.evaluate(() => { window.__verifyMarker = 'kept'; });
-    edit('src/web/shell.tsx', text => text.replace('<div className="brand">PR Guide</div>', '<div className="brand">PR Guide (reloaded)</div>'));
-    await page.locator('.app-sidebar .brand', { hasText: 'PR Guide (reloaded)' }).waitFor({ timeout: 30_000 });
+    edit('src/web/shell.tsx', text => text.replace('>Find a pull request</span>', '>Find a pull request (reloaded)</span>'));
+    await page.locator('[data-slot="sidebar-menu-button"]', { hasText: 'Find a pull request (reloaded)' }).waitFor({ timeout: 30_000 });
     ctx.check(await kept(), 'a UI edit shows up in place, without reloading the page');
     await ctx.shot('ui-hot-reload');
 

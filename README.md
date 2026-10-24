@@ -24,7 +24,8 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 
 ## What it covers
 
-- Chapters organized around intent and behavior, with evidence highlighting and a filterable outline sidebar (press `/`) listing each section's files.
+- The shadcn Sidebar keeps app navigation above the files on Overview, Guide and Diff. Repositories can collapse, and the file tree compacts nested folders and truncates only the last name. Drag the sidebar edge to resize it; double-click to reset. Search files with the magnifying glass or `/`; use the adjacent display button to switch between folders and diff order or hide matching files. Press `F` or `⌘B` / `Ctrl+B` to toggle the sidebar.
+- Chapters organized around intent and behavior, with evidence highlighting and links to each section's files.
 - Display settings, remembered in this browser: unified/split layout, hidden whitespace-only changes, line wrapping, word highlights, line numbers and code size. Diffs render through `@pierre/diffs`.
 - Markdown file headers have an icon button to toggle preview. Preview reads the full file at the PR's head commit, renders Mermaid diagrams and highlights fenced code with the diff viewer's light/dark themes. Deleted files preview the base version. Raw HTML is skipped and images open as links.
 - shadcn base-nova components backed by Base UI (buttons, checkbox, menus, popovers, dialog, switch).

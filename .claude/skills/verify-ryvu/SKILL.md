@@ -69,6 +69,9 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 `<journey>` is a file in `journeys/`. Exit code 0 means every check passed. Every run also fails on an uncaught page error or a Content-Security-Policy violation.
 
 - Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`.
+- `review-sidebar`: full-height app navigation and files on all review views, compact folder labels, resizing and saved width, file search, file display settings, shadcn collapse controls, and the mobile Sheet.
+- `tooltip-layout`: long file paths wrap inside a tooltip that fits the longest line; keyboard hints stay visible, including on a narrow viewport.
+- `file-progress`: the active file row fills as the diff scrolls, reverses when scrolling up, and resets on the next file, in both folder and diff-order views.
 - `scrolling`: compositor frames keep popovers attached to sticky controls while the page scrolls; the file list and folder tree scroll independently and contain scrolling at both edges. Needs a PR with enough files to overflow the sidebar.
 - `markdown-preview`: a Markdown file's Preview toggle renders its full contents, Mermaid diagrams and highlighted code in both themes. It checks returning to Diff, preserving an unsent comment, comment jumps, find and retry after a failed file request. Picks from the inbox, or set `VERIFY_MARKDOWN_PR=owner/repo/number` to a PR with Mermaid and a supported fenced code example. It adds and removes one local draft without submitting a review.
 - `markdown-rendering` (needs `VERIFY_MODE=dev`): exercises the real rendering helpers in the browser to check escaped code, Mermaid directives that attempt to enable HTML, and cleanup after an invalid diagram. It supplements the UI journey without mocking GitHub.
@@ -106,7 +109,8 @@ Stable handles in this app (prefer these over coordinates):
   - Toolbar: `.diff-toolbar > .toolbar-progress` (`N/M reviewed`).
   - Display settings: `.toolbar-actions [aria-label="Display settings"]` opens a popover whose radios and checkboxes have accessible names (`Split view`, `Inline`, `Indicators`, `Hidden`, `Wrap long lines`…). It has buttons `Expand` and `Collapse`.
 - **Sidebar:**
-  - Opening and filtering: key `f` toggles `.file-tree`, the filter is placeholder `Filter files`, and rows are `.list-file` (current row: `.list-file.is-current`).
+  - Opening and filtering: key `f` toggles `[data-slot=sidebar-container]`; `Search files` or `/` opens the panel with placeholder `Filter files`, and rows are `.list-file` (current row: `.list-file.is-current`).
+  - Resize: `[data-slot=sidebar-rail]` accepts pointer drags, Left/Right keys, and a double-click to reset; width persists across reloads.
   - Display options: `File list display` button, with `Diff order` and `Folders` radios and the `Hide files matching patterns` switch.
 - **Diffs:**
   - Cards: `.diff-card` (`.expanded` when open), with the header `.file-heading`. It pins at 108px once its card scrolls under the toolbar (64px on the Guide). Pinning is pure CSS, so there is no class to wait for: compare the header's top with its card's.
@@ -115,8 +119,7 @@ Stable handles in this app (prefer these over coordinates):
   - Rows: `[data-line][data-line-type="context|change-addition|change-deletion"]`.
   - Separators: `[data-separator=line-info]`, with buttons `[data-expand-up|down|both|all-button]`.
 - **Comments:**
-  - Key `c` opens `.comments-menu` (rows: `.comments-menu-item`).
-  - Inline threads are `.comment-fold`, and the one you jumped to has `.is-focused`.
+  - Inline threads are `.comment-fold`. Review → pending comments jumps to a local draft.
   - Indicator mode draws `.comment-indicator`.
 - **Find:**
   - ⌘F (Ctrl+F) opens `.find-bar`. The input's label is `Find in diff`, the count is `.find-count` (`3 of 42`), and the `Search collapsed files` toggle is `aria-pressed`.

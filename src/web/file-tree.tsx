@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { ChevronRight, FileCode2, List, ListTree, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -25,7 +25,7 @@ export function ChangedFileTree({ files, viewed, current, search, onPick }: { fi
     paths: files.map(file => file.path), flattenEmptyDirectories: true, initialExpansion: 'open', fileTreeSearchMode: 'hide-non-matches',
     // Only additions, deletions and renames get a status badge; nearly every file is modified.
     gitStatus: files.flatMap(file => statuses[file.status] ? [{ path: file.path, status: statuses[file.status] }] : []),
-    unsafeCSS: `[data-file-tree-virtualized-scroll] { overscroll-behavior: contain; } [data-item-section="decoration"] { flex: 0 0 auto; font-size: 11px; font-variant-numeric: tabular-nums; padding-left: 6px; } [data-item-type="folder"] [data-item-section="git"] { visibility: hidden; } [data-item-flattened-subitem]:hover { text-decoration: none; } [data-type="item"][data-item-selected="true"] { background: linear-gradient(to right, var(--file-progress-fill) calc(var(--file-progress, 0) * 100%), var(--file-progress-track) 0); --truncate-marker-background-color: var(--file-progress-track); --truncate-marker-background-overlay-color: transparent; }`,
+    unsafeCSS: `[data-item-type="file"][aria-selected="true"] { background: linear-gradient(to right, var(--file-progress-fill) calc(var(--file-progress, 0) * 100%), var(--file-progress-track) 0); --truncate-marker-background-color: var(--file-progress-track); --truncate-marker-background-overlay-color: transparent; } [data-item-git-status] > [data-item-section="content"] { color: inherit; } [data-item-flattened-subitem]:hover { text-decoration: none; } [data-item-flattened-subitems] { min-width: 0; } [data-item-flattened-subitem]:not(:last-child) { flex: 0 0 auto; min-width: max-content; } [data-item-flattened-subitem]:last-child { flex: 1 1 auto; min-width: 0; } [data-file-tree-virtualized-scroll] { overscroll-behavior: contain; } [data-item-section="decoration"] { flex: 0 0 auto; font-size: 11px; font-variant-numeric: tabular-nums; padding-left: 6px; } [data-item-type="folder"] [data-item-section="git"] { display: none; }`,
     onSelectionChange: paths => {
       const path = paths[paths.length - 1];
       if (!path) return;
@@ -69,12 +69,12 @@ export function ChangedFileList({ files, viewed, current, search, onPick }: { fi
 
 export type FileOrder = 'tree' | 'diff';
 // How the files sidebar lists files, and which files it hides.
-export function FileDisplayMenu({ order, onOrder, hidden, files }: { order: FileOrder; onOrder: (order: FileOrder) => void; hidden: HiddenFiles; files: ChangedFile[] }) {
+export function FileDisplayMenu({ order, onOrder, hidden, files, trigger }: { order: FileOrder; onOrder: (order: FileOrder) => void; hidden: HiddenFiles; files: ChangedFile[]; trigger?: ReactElement }) {
   const [draft, setDraft] = useState(''), [expanded, setExpanded] = useState(true), value = draft.trim();
   const matches = (pattern: string) => files.filter(file => matchesPattern(pattern, file.path)).length;
   const add = () => { if (value && !hidden.patterns.includes(value)) hidden.setPatterns([...hidden.patterns, value]); setDraft(''); };
   return <Popover>
-    <Tip content="Display options"><PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="File list display" />}><SlidersHorizontal /></PopoverTrigger></Tip>
+    <Tip content="File display settings"><PopoverTrigger render={trigger ?? <Button variant="ghost" size="icon-sm" aria-label="File list display" />}><SlidersHorizontal /></PopoverTrigger></Tip>
     <PopoverContent positionMethod="fixed" side="bottom" align="end" sideOffset={6} className="w-[300px] gap-0 p-0" initialFocus={focusOnKeyboardOpen}>
       <div className="file-menu-section">
         <PopoverTitle className="file-menu-title">Show files</PopoverTitle>

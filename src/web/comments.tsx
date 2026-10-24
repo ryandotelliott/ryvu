@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Check, ChevronRight, CircleAlert, CornerDownRight, FileCode2, GitPullRequest, LoaderCircle, MessageSquare, Pencil, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, CornerDownRight, FileCode2, GitPullRequest, LoaderCircle, MessageSquare, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
@@ -132,52 +132,6 @@ export function Annotation({ data }: { data: AnnotationData }) {
   return <div className="annotation" data-comment-anchor={commentAnchor(data)}><CollapsibleComment data={data} /></div>;
 }
 
-type MenuItem = { data: CommentData; path: string; line: number };
-const isTyping = (target: EventTarget | null) => target instanceof HTMLElement && Boolean(target.closest('input, textarea, select, [contenteditable]'));
-// Every comment on the diff, by file and line; resolved threads fold into their own section. Picking one jumps to it in the diff.
-export function CommentsMenu({ threads, drafts, files, onJump }: { threads: CommentThread[]; drafts: DraftComment[]; files: string[]; onJump: (anchor: string, path: string) => void }) {
-  const [open, setOpen] = useState(false), now = useNow(), popup = useRef<HTMLDivElement>(null);
-  const position = (path: string) => { const index = files.indexOf(path); return index === -1 ? files.length : index; };
-  // Outdated threads sort after the file's current ones, by their old line.
-  const items: MenuItem[] = [...threads.map(thread => ({ data: { kind: 'thread', thread } as CommentData, path: thread.path, line: thread.line ?? 1e9 + (thread.originalLine ?? 0) })),
-    ...drafts.map(draft => ({ data: { kind: 'draft', draft } as CommentData, path: draft.path, line: draft.line }))]
-    .sort((a, b) => position(a.path) - position(b.path) || a.line - b.line);
-  const isResolved = (item: MenuItem) => item.data.kind === 'thread' && item.data.thread.resolved;
-  const byFile = (list: MenuItem[]) => list.reduce<{ path: string; items: MenuItem[] }[]>((groups, item) => { const last = groups[groups.length - 1]; if (last?.path === item.path) last.items.push(item); else groups.push({ path: item.path, items: [item] }); return groups; }, []);
-  const active = items.filter(item => !isResolved(item)), resolved = items.filter(isResolved);
-  useEffect(() => {
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || (event.key !== 'c' && event.key !== 'C') || isTyping(event.target)) return;
-      // Other dialogs keep the key; this menu's own popup closes on it.
-      const dialog = event.target instanceof HTMLElement ? event.target.closest('[role="dialog"]') : null;
-      if (dialog && !popup.current?.contains(dialog)) return;
-      event.preventDefault(); setOpen(value => !value);
-    };
-    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, []);
-  const row = (item: MenuItem) => { const summary = commentSummary(item.data), at = item.data.kind === 'thread' ? item.data.thread.comments[0]?.createdAt : item.data.draft.createdAt;
-    return <button type="button" key={commentAnchor(item.data)} className="comments-menu-item" onClick={() => { setOpen(false); onJump(commentAnchor(item.data), item.path); }}>
-      <span className="comments-menu-head">{summary.pending ? <span className="pending-chip">Pending</span> : <><Avatar login={summary.author} size={16} /><strong>{summary.author}</strong></>}<span className="comments-menu-line">{summary.line}</span>{summary.outdated && <span className="outdated-chip">Outdated</span>}{at && <span className="comments-menu-time">{agoLong(at, now)}</span>}</span>
-      <span className="comments-menu-text">{summary.text || 'No text'}</span>
-      {summary.count > 1 && <span className="comments-menu-replies"><CornerDownRight size={11} />{summary.count - 1} {summary.count === 2 ? 'reply' : 'replies'}</span>}
-    </button>; };
-  const groups = (list: MenuItem[]) => byFile(list).map(group => <section key={group.path}><h5>{group.path}</h5>{group.items.map(row)}</section>);
-  return <Popover open={open} onOpenChange={setOpen}>
-    <Tip content="Comments" hotkey="C" side="bottom"><PopoverTrigger render={<Button variant="ghost" size="sm" aria-label={`${items.length} comments`} />}><MessageSquare />{items.length}</PopoverTrigger></Tip>
-    <PopoverContent ref={popup} positionMethod="fixed" side="bottom" align="end" sideOffset={6} className="comments-menu overflow-hidden" initialFocus={focusOnKeyboardOpen}>
-      <PopoverTitle className="comments-menu-title">Comments{resolved.length > 0 && <span className="comments-menu-count">{active.length} open · {resolved.length} resolved</span>}</PopoverTitle>
-      <ScrollArea className="comments-menu-scroll">
-        {!items.length && <p className="comments-menu-empty">No comments on this pull request’s code yet.</p>}
-        {groups(active)}
-        {resolved.length > 0 && <Collapsible className="comments-menu-resolved">
-          <CollapsibleTrigger className="comment-fold-trigger"><ChevronRight size={13} className="chevron" />Resolved<span className="comment-fold-count">{resolved.length}</span></CollapsibleTrigger>
-          <CollapsibleContent>{groups(resolved)}</CollapsibleContent>
-        </Collapsible>}
-      </ScrollArea>
-    </PopoverContent>
-  </Popover>;
-}
-
 const reviewStates: Record<string, { label: string; chip: string; tone: string; icon: ReactNode }> = {
   APPROVED: { label: 'approved these changes', chip: 'Approved', tone: 'approved', icon: <Check size={12} /> },
   CHANGES_REQUESTED: { label: 'requested changes', chip: 'Changes requested', tone: 'changes', icon: <X size={12} /> },
@@ -233,8 +187,8 @@ export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }
     try { await onSubmit(event, body); setBody(''); setEvent('COMMENT'); setOpen(false); } catch (e) { setError(e instanceof Error ? e.message : 'The review could not be submitted.'); } finally { setBusy(false); }
   }
   return <Popover open={open} onOpenChange={setOpen}>
-    <PopoverTrigger render={<Button size="sm" />}>
-      Submit review{drafts.length > 0 && <span className="review-count">{drafts.length}</span>}
+    <PopoverTrigger render={<Button size="sm" aria-label="Review" />}>
+      Review{drafts.length > 0 && <span className="review-count">{drafts.length}</span>}<ChevronDown size={12} />
     </PopoverTrigger>
     <PopoverContent positionMethod="fixed" side="bottom" align="end" sideOffset={6} className="w-[380px] gap-3 p-3.5" initialFocus={area}>
       <PopoverTitle className="text-sm font-semibold">Finish your review</PopoverTitle>

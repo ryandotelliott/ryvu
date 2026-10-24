@@ -1,4 +1,4 @@
-import { Component, useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { Component, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import { Radio } from '@base-ui/react/radio';
@@ -45,11 +45,30 @@ export const focusOnKeyboardOpen = (openType: string) => openType === 'keyboard'
 // Hover delays: `long` for labels on things you read (truncated names), `short` for icon buttons, `instant` for dense controls you scan.
 const tipDelays = { long: 700, short: 300, instant: 0 } as const;
 export type TipDelay = keyof typeof tipDelays;
+function TooltipText({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || (typeof children !== 'string' && typeof children !== 'number')) return;
+    let frame = 0;
+    const fit = () => {
+      element.style.width = '';
+      const range = document.createRange(); range.selectNodeContents(element);
+      const scale = element.getBoundingClientRect().width / element.offsetWidth;
+      const width = Math.max(0, ...Array.from(range.getClientRects(), rect => rect.width / scale));
+      if (Number.isFinite(width) && width > 0) element.style.width = `${Math.ceil(width)}px`;
+    };
+    const onResize = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(fit); };
+    fit(); window.addEventListener('resize', onResize);
+    return () => { window.removeEventListener('resize', onResize); cancelAnimationFrame(frame); };
+  }, [children]);
+  return <span ref={ref} className="min-w-0 [overflow-wrap:anywhere]">{children}</span>;
+}
 // A tooltip around one element; the child must accept a ref and props (shadcn buttons and plain elements do).
 export function Tip({ content, hotkey, delay = 'short', side = 'top', children }: { content: ReactNode; hotkey?: string; delay?: TipDelay; side?: 'top' | 'bottom' | 'left' | 'right'; children: ReactElement }) {
   return <Tooltip>
     <TooltipTrigger delay={tipDelays[delay]} render={children} />
-    <TooltipContent side={side}>{content}{hotkey && <Kbd>{hotkey}</Kbd>}</TooltipContent>
+    <TooltipContent side={side}><TooltipText>{content}</TooltipText>{hotkey && <Kbd className="shrink-0">{hotkey}</Kbd>}</TooltipContent>
   </Tooltip>;
 }
 
@@ -80,23 +99,6 @@ export function StatusBox({ job, error, canCancel, onCancel, action }: { job: Jo
 
 export function Highlighted({ runs }: { runs: { text: string; hit: boolean }[] }) {
   return <>{runs.map((run, i) => run.hit ? <mark key={i}>{run.text}</mark> : <span key={i}>{run.text}</span>)}</>;
-}
-
-// A vertical drag handle that resizes the element before it. Arrow keys step by 16px; double-click resets.
-export function ResizeHandle({ value, min, max, onChange, onReset, label, className = '' }: { value: number; min: number; max: number; onChange: (value: number) => void; onReset?: () => void; label: string; className?: string }) {
-  const clamp = (next: number) => Math.round(Math.min(max, Math.max(min, next)));
-  return <div role="separator" aria-orientation="vertical" aria-label={label} aria-valuenow={value} aria-valuemin={min} aria-valuemax={max} tabIndex={0} className={`resize-handle ${className}`}
-    onDoubleClick={onReset}
-    onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); onChange(clamp(value + (event.key === 'ArrowRight' ? 16 : -16))); } }}
-    onPointerDown={event => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      const handle = event.currentTarget, startX = event.clientX, startValue = value;
-      handle.setPointerCapture(event.pointerId); document.body.classList.add('is-resizing');
-      const move = (moved: PointerEvent) => onChange(clamp(startValue + moved.clientX - startX));
-      const end = () => { handle.removeEventListener('pointermove', move); document.body.classList.remove('is-resizing'); };
-      handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', end, { once: true }); handle.addEventListener('pointercancel', end, { once: true });
-    }} />;
 }
 
 // Settings rows that read like menu items (label left, check right) but are ordinary form controls,

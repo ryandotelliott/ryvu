@@ -12,10 +12,14 @@ export default async function (ctx) {
   if (!(await page.locator('.file-tree').count())) await page.keyboard.press('f');
   await page.waitForSelector('.file-tree');
   ctx.check(await page.locator('.file-tree').isVisible(), 'F opens the files sidebar');
+  await page.getByRole('button', { name: 'File list display', exact: true }).click();
+  await page.getByRole('button', { name: 'Diff order', exact: true }).click();
+  await page.keyboard.press('Escape');
   if (await page.locator('.list-file').count()) ctx.check(await page.locator('.list-file').count() <= files.length && await page.locator('.list-file').count() > 0, `sidebar lists ${await page.locator('.list-file').count()} of ${files.length} files (hidden-file filters may remove some)`);
   await ctx.shot('sidebar');
 
   const target = files[Math.min(5, files.length - 1)], segment = target.path.split('/').slice(-1)[0].slice(0, 6);
+  await page.getByRole('button', { name: 'Search files', exact: true }).click();
   await page.getByPlaceholder('Filter files').fill(segment);
   const filtered = await page.locator('.list-file').count();
   ctx.check(filtered > 0 && filtered <= files.length, `filtering by "${segment}" leaves ${filtered} rows`);
