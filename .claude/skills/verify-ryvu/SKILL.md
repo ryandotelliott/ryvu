@@ -110,7 +110,7 @@ Stable handles in this app (prefer these over coordinates):
   - Toolbar: `.diff-toolbar > .toolbar-progress` (`N/M reviewed`).
   - Display settings: `.toolbar-actions [aria-label="Display settings"]` opens a popover whose radios and checkboxes have accessible names (`Split view`, `Inline`, `Indicators`, `Hidden`, `Wrap long lines`…). It has buttons `Expand` and `Collapse`.
 - **Sidebar:**
-  - Opening and filtering: key `f` toggles `[data-slot=sidebar-container]`; `Search files` or `/` opens the panel with placeholder `Filter files`, and rows are `.list-file` (current row: `.list-file.is-current`).
+  - Opening and filtering: ⌘B (Ctrl+B) toggles `[data-slot=sidebar-container]`, and so do `Hide sidebar` inside it and `Show sidebar` in the top bar once it is hidden; `Search files` or `/` opens the panel with placeholder `Filter files`, and rows are `.list-file` (current row: `.list-file.is-current`).
   - Resize: `[data-slot=sidebar-rail]` accepts pointer drags, Left/Right keys, and a double-click to reset; width persists across reloads.
   - Display options: `File list display` button, with `Diff order` and `Folders` radios and the `Hide files matching patterns` switch.
 - **Diffs:**

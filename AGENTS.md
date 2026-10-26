@@ -15,7 +15,7 @@ Hand-style elements only when no primitive fits, such as the file and outline ro
 Use `Tip` from `src/web/ui.tsx`, never the `title` attribute.
 
 - `delay`: `long` (700ms) for labels on content you read, such as truncated names and timestamps. `short` (300ms, the default) for icon buttons. `instant` for dense controls you scan, such as the section rail.
-- `hotkey`: pass the key, for example `hotkey="F"`, to show it in the tooltip.
+- `hotkey`: pass the key, for example `hotkey="/"`, to show it in the tooltip.
 - The child must accept a ref and props; shadcn components and plain elements do. Wrap a popover trigger from the outside: `<Tip><PopoverTrigger render={<Button />} /></Tip>`.
 
 ### shadcn files with local edits

@@ -70,7 +70,7 @@ export default async function (ctx) {
     ctx.check(await cancel.isEnabled() && alive(job.pid) && alive(job.grandchild), `${label}: the Guide still shows the running job with an enabled Cancel, and its stand-in ${job.pid} is alive`);
   };
   const toList = async () => {
-    await page.locator('.pr-topbar a[aria-label="Pull requests"]').click();
+    await page.locator('[data-slot=sidebar]').getByRole('link', { name: 'Pull requests', exact: true }).click();
     await page.waitForSelector('a.pull-row:not(.skeleton)', { timeout: 60_000 });
   };
   const hotEdit = async (file, change, label) => {

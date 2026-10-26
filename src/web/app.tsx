@@ -138,7 +138,6 @@ function PullSkeleton({ target, title, color }: { target: PullTarget; title?: st
   </header>;
   return <div className={`pr-page view-${target.view}`} aria-busy="true" aria-label="Loading the pull request">
     <header className="pr-topbar">
-      <Tip content="Pull requests" side="bottom"><Link {...homeLink()} className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} aria-label="Pull requests"><ArrowLeft /></Link></Tip>
       <span className="topbar-title"><span className="topbar-number">#{target.number}</span>{title ? <span>{title}</span> : <Skeleton className="h-3.5 w-48 self-center" />}</span>
       <nav className="view-tabs" aria-label="View">{tabs.map(([name, label]) => <Link key={name} {...pullLink(target.repo, target.number, name)} className={target.view === name ? 'is-active' : ''}>{label}</Link>)}</nav>
       <div className="topbar-actions"><Skeleton className="h-7 w-28" /></div>

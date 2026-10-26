@@ -36,7 +36,7 @@ export default async function (ctx) {
   for (const name of ['codex.pid', 'grandchild.pid']) rmSync(record(name));
   await page.getByRole('button', { name: 'Re-analyze' }).click();
   const second = await stub();
-  await page.locator('.pr-topbar a[aria-label="Pull requests"]').click();
+  await page.locator('[data-slot=sidebar]').getByRole('link', { name: 'Pull requests', exact: true }).click();
   await page.waitForSelector('a.pull-row:not(.skeleton), .empty', { timeout: 60_000 });
   await page.waitForTimeout(2000);
   ctx.check(alive(second.pid), 'the job keeps running after leaving the PR for the list');

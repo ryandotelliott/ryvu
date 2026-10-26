@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowDown, ArrowLeft, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleX, Clock, ExternalLink, Eye, EyeOff, FileCode2, GitBranch, ListChecks, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
+import { ArrowDown, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleX, Clock, ExternalLink, Eye, EyeOff, FileCode2, GitBranch, ListChecks, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -17,9 +17,10 @@ import { FindBar, findMatches, scrollToMatch, useFindHighlights } from './find';
 import { clampFontSize, fontSizes, useDisplay, type DisplaySettings } from './display';
 import { contains } from './fuzzy';
 import { matchesPattern, useHiddenFiles } from './file-filters';
-import { homeLink, pullLink, type PullViewName } from './links';
+import { pullLink, type PullViewName } from './links';
 import { Avatar, CheckRow, focusOnKeyboardOpen, Kbd, PullIcon, RadioRows, RepoSwatch, Tip } from './ui';
-import { AppSidebar, SidebarToggle } from './shell';
+import { AppSidebar, ShowSidebar } from './shell';
+import { StackMenu } from './stack';
 import { inline, Markdown } from './markdown';
 import { fileAnchor, ReviewContext, scrollPageBy, splitPath } from './pull-page';
 import type { ChangedFile, Chapter, PullDetail, Reference, ReviewEvent, Snapshot } from '../types';
@@ -66,7 +67,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   const { snapshot, guide: review, conversation, drafts } = detail, guide = review?.guide ?? null;
   const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`, number = snapshot.identity.number, pullKey = `${repo.toLowerCase()}#${number}`;
   const [display, setDisplay, resetDisplay] = useDisplay(), navigate = useNavigate();
-  const { isMobile, open: sidebarOpen, openMobile, setOpen: setSidebarOpen, setOpenMobile, toggleSidebar } = useSidebar();
+  const { isMobile, open: sidebarOpen, openMobile, setOpen: setSidebarOpen, setOpenMobile } = useSidebar();
   const sidebarVisible = isMobile ? openMobile : sidebarOpen;
   const viewedKey = `pr-guide:viewed:${pullKey}@${snapshot.headSHA}`;
   // Files matching a hidden pattern stay out of the Diff page's list, diffs and totals.
@@ -108,7 +109,6 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], [role="dialog"]')) return;
       const index = ['1', '2', '3'].indexOf(event.key);
       if (index !== -1) { event.preventDefault(); void navigate(pullLink(repo, number, views[index][0])); return; }
-      if (event.key === 'f' || event.key === 'F') { event.preventDefault(); toggleSidebar(); return; }
       if (event.key === '/') { event.preventDefault(); searchFiles(); return; }
       if ((event.key !== 'j' && event.key !== 'k') || !items.length) return;
       let at = -1;
@@ -116,7 +116,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
       event.preventDefault(); scrollToElement(items[Math.min(items.length - 1, Math.max(0, event.key === 'j' ? at + 1 : at - 1))], offset);
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, [items.join('|'), view, offset, toggleSidebar, isMobile, setOpenMobile, setSidebarOpen]);
+  }, [items.join('|'), view, offset, isMobile, setOpenMobile, setSidebarOpen]);
   useEffect(() => {
     // Tracks which section or file is being read, for the section rail and file tree.
     let frame = 0;
@@ -235,9 +235,9 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     </AppSidebar>
     <SidebarInset className={`pr-page view-${view} min-w-0`} data-sidebar-open={sidebarVisible && !isMobile}>
     <header className="pr-topbar">
-      <SidebarToggle label={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'} hotkey="F" />
-      <Tip content="Pull requests" side="bottom"><Link {...homeLink()} className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} aria-label="Pull requests"><ArrowLeft /></Link></Tip>
-      <Tip content={`${repo} #${number}: ${snapshot.title}`} delay="long" side="bottom"><span className="topbar-title"><span className="topbar-number">#{number}</span><span>{snapshot.title}</span></span></Tip>
+      <ShowSidebar />
+      {detail.stack ? <StackMenu repo={repo} number={number} title={snapshot.title} stack={detail.stack} view={view} />
+        : <Tip content={`${repo} #${number}: ${snapshot.title}`} delay="long" side="bottom"><span className="topbar-title"><span className="topbar-number">#{number}</span><span>{snapshot.title}</span></span></Tip>}
       <nav className="view-tabs" aria-label="View">{views.map(([name, label], i) => <Tip key={name} content={label} hotkey={String(i + 1)} delay="long" side="bottom"><Link {...pullLink(repo, number, name)} className={view === name ? 'is-active' : ''} aria-current={view === name ? 'page' : undefined}>{label}{name === 'guide' && analyzing && <LoaderCircle size={12} className="spinner" />}</Link></Tip>)}</nav>
       <div className="topbar-actions">
         <ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />

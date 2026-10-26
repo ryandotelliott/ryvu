@@ -1,6 +1,6 @@
 import { UserError } from './domain.js';
 import { runCommand, type Runner } from './process.js';
-import type { CommentThread, Conversation, DiffSide, DraftComment, PRIdentity, PullStatus, ReviewComment, ReviewEvent, ReviewSummary } from './types.js';
+import type { CommentThread, Conversation, DiffSide, DraftComment, PRIdentity, PullStack, PullStatus, ReviewComment, ReviewEvent, ReviewSummary } from './types.js';
 
 const MAX_BODY = 65_536;
 // GitHub explains rejected writes in a JSON body; surface that instead of a generic failure.
@@ -61,6 +61,23 @@ export async function fetchStatus(identity: PRIdentity, signal: AbortSignal, run
     merge: MERGE[pull.mergeStateStatus] ?? null,
     commits: Number(pull.commits?.totalCount) || 0
   };
+}
+
+const STACKED = 'number title isDraft state additions deletions commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }';
+// The stack this PR belongs to, or null when it isn't stacked. GitHub lists a stack bottom first. Read-only.
+export async function fetchStack(identity: PRIdentity, signal: AbortSignal, runner: Runner = runCommand): Promise<PullStack | null> {
+  const stacks: unknown = JSON.parse(await runner('gh', ['api', `${route(identity)}/stacks?pull_request=${identity.number}`], { signal }));
+  const stack = Array.isArray(stacks) ? stacks[0] as Record<string, any> | undefined : undefined;
+  const numbers: number[] = (Array.isArray(stack?.pull_requests) ? stack.pull_requests : []).map((pull: Record<string, any>) => Number(pull?.number)).filter((number: number) => Number.isSafeInteger(number) && number > 0);
+  if (numbers.length < 2 || !numbers.includes(identity.number)) return null;
+  const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${numbers.map((number, i) => `p${i}: pullRequest(number: ${number}) { ${STACKED} }`).join(' ')} } }`;
+  const output = await runner('gh', ['api', 'graphql', '-f', `query=${query}`, '-f', `owner=${identity.owner}`, '-f', `name=${identity.repo}`], { signal });
+  const repository: Record<string, any> = JSON.parse(output)?.data?.repository ?? {};
+  const pulls = numbers.map((number, i) => {
+    const raw: Record<string, any> = repository[`p${i}`] ?? {}, state = String(raw.state ?? 'OPEN').toLowerCase();
+    return { number, title: String(raw.title ?? '').slice(0, 500), state: state === 'merged' || state === 'closed' ? state : 'open', draft: Boolean(raw.isDraft), additions: Number(raw.additions) || 0, deletions: Number(raw.deletions) || 0, checks: CHECKS[raw.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state] ?? null } as const;
+  });
+  return { base: String(stack?.base?.ref ?? ''), pulls: pulls.reverse() };
 }
 
 export async function submitReview(identity: PRIdentity, headSHA: string, event: ReviewEvent, body: string, drafts: DraftComment[], runner: Runner = runCommand): Promise<void> {

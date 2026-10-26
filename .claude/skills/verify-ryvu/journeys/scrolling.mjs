@@ -61,7 +61,7 @@ export default async function (ctx) {
 
   await checkPopover(page.getByRole('button', { name: 'Display settings', exact: true }), page.locator('.display-popover'), 'display');
   await checkPopover(page.getByRole('button', { name: 'Review', exact: true }), page.getByRole('dialog').filter({ hasText: 'Finish your review' }), 'review');
-  if (!(await page.locator('.file-tree').count())) await page.keyboard.press('f');
+  if (!(await page.locator('.file-tree').count())) await page.keyboard.press(process.platform === 'darwin' ? 'Meta+b' : 'Control+b');
   const fileDisplay = page.getByRole('button', { name: 'File list display' });
   const filePopup = page.getByRole('dialog').filter({ hasText: 'Show files' });
   await checkPopover(fileDisplay, filePopup, 'file-display');
