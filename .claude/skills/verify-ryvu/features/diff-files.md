@@ -5,6 +5,7 @@ The Diff page shows every changed file as a card with syntax-highlighted code. T
 ## Sub-features
 
 - `diff-draw` draws code rows for open files (virtualized; only rows near the screen exist).
+- `line-selection` selects one line by clicking its number, clears it on a second click, and selects a range by dragging. Guide and Diff keep separate selections.
 - `sidebar-toggle` opens and closes the review sidebar.
 - `sidebar-resize` adjusts the width by dragging its edge or pressing arrow keys on the divider; double-click resets it. Width persists across reloads.
 - `sidebar-tree` compacts nested folder chains and truncates only the last folder name.
@@ -30,6 +31,7 @@ Preconditions:
 - A PR with several files; `pickLargePull` takes the largest PR on the first inbox page.
 
 - **Code draws.** `go('/pr/…/diff')`, `waitForDiffRows()`. `visibleRows()` is above 0 and `.diff-toolbar > .toolbar-progress` reads `0/M reviewed`.
+- **Line selection** (`journeys/selection.mjs`). A Guide file chip highlights its saved reference. Clicking another gutter line replaces it; dragging selects a new range. Check the range after a redraw and tab switch, then save and delete a multi-line local draft.
 - **Open sidebar.** Press `f` if `[data-slot=sidebar-container]` is absent. Choose `Diff order` in `File list display` for `.list-file` rows, or `Folders` for the virtualized tree.
 - **Filter.** Click `Search files`, then fill `Filter files` with part of a file name. The row count drops but stays above 0; clear the filter.
 - **Jump.** Click the row for a file further down. That file's `.diff-card` top is 108px (±2) and its row has `.is-current`.

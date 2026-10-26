@@ -16,7 +16,11 @@ export default async function (ctx) {
     const input = page.getByPlaceholder(search);
     await input.fill(query); await page.getByRole('option', { name: choice, exact: true }).click();
   }
-  const loaded = () => page.locator('a.pull-row').first().waitFor({ timeout: 60_000 });
+  const loaded = async () => {
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.locator('a.pull-row').first().waitFor({ timeout: 60_000 });
+    await page.waitForFunction(() => !document.querySelector('.pull-groups[aria-busy=true]'));
+  };
   await options(); await root.locator('[data-slot=combobox-trigger]').filter({ hasText: 'Repository' }).click();
   await page.getByPlaceholder('Find a repository…').fill('no-such-repository-verify');
   await page.getByText('No matches', { exact: true }).waitFor();
@@ -29,7 +33,7 @@ export default async function (ctx) {
   await page.waitForURL(url => !url.searchParams.has('repo')); await loaded();
   await select('Author', 'Find an author…', author, author);
   await page.waitForURL(url => url.searchParams.get('author') === author); await loaded();
-  ctx.check((await page.locator('.pull-meta').allTextContents()).every(text => text.endsWith(`by ${author}`)), 'the searchable author filter applies to the list');
+  ctx.check((await page.locator('a.pull-row .pull-meta').allTextContents()).every(text => text.endsWith(`by ${author}`)), 'the searchable author filter applies to the list');
   await select('Author', 'Find an author…', '', 'Anyone');
   await page.waitForURL(url => !url.searchParams.has('author')); await loaded();
   await options(); await root.getByRole('button', { name: /^Drafts/ }).click();

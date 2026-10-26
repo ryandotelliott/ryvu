@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { BookOpen, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -7,9 +7,10 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/compone
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { listPulls } from '../inbox.functions';
-import { ago, agoLong, readProgress, remember, seedIndex, useNow } from './browser-state';
+import { pullSort } from '../pull-list';
+import { ago, agoLong, readProgress, readStored, remember, seedIndex, useNow, writeStored } from './browser-state';
 import { groupPulls } from './home-groups';
+import type { InboxCache } from './inbox-cache';
 import { homeLink, pullLink } from './links';
 import { AddRepoForm } from './settings';
 import { Avatar, focusOnKeyboardOpen, RadioRows, PullIcon, Tip } from './ui';
@@ -17,63 +18,48 @@ import type { PullFilters, PullPage, PullSummary, PullTab, PullSort, Settings } 
 
 const tabLabels: [PullTab, string][] = [['all', 'All open'], ['review', 'Review requested'], ['mine', 'Authored by me'], ['guides', 'Guide ready']];
 
-type ListState = { items: PullSummary[]; cursor: string | null; total: number; counts: NonNullable<PullPage['counts']>; repos: NonNullable<PullPage['repos']> };
-export function Home({ filters, settings, onPage, onSettings }: { filters: PullFilters; settings: Settings | null; onPage: (page: PullPage) => void; onSettings: (settings: Settings) => void }) {
-  const [data, setData] = useState<ListState | null>(null), [loading, setLoading] = useState(true), [error, setError] = useState('');
-  const [loadingMore, setLoadingMore] = useState(false), [moreError, setMoreError] = useState('');
-  const request = useRef(0), sentinel = useRef<HTMLDivElement>(null), now = useNow(), navigate = useNavigate();
-  const current = { tab: filters.tab ?? '', repo: filters.repo ?? '', author: filters.author ?? '', drafts: filters.drafts ?? '', sort: filters.sort ?? '' };
+const sortKey = 'pr-guide:pull-sort';
+export function Home({ cache, filters, settings, onPage, onSettings }: { cache: InboxCache; filters: PullFilters; settings: Settings | null; onPage: (page: PullPage) => void; onSettings: (settings: Settings) => void }) {
+  useSyncExternalStore(cache.subscribe, cache.getVersion, cache.getVersion);
+  const [savedSort, setSavedSort] = useState(() => pullSort(readStored<string>(sortKey, 'updated')));
+  const sort = filters.sort ? pullSort(filters.sort) : savedSort;
+  const sentinel = useRef<HTMLDivElement>(null), now = useNow(), navigate = useNavigate();
+  const current = { tab: filters.tab ?? '', repo: filters.repo ?? '', author: filters.author ?? '', drafts: filters.drafts ?? '', sort };
   const query = new URLSearchParams(Object.entries(current).filter(([, value]) => value)).toString(), configured = settings ? settings.repos.length > 0 : null;
-  // The first page carries tab counts and per-repository totals; later pages only add items.
-  async function load() {
-    const id = ++request.current; setLoading(true); setMoreError('');
-    try {
-      const page = await listPulls({ data: filters });
-      if (id !== request.current) return;
-      remember(page.items); setError(''); onPage(page);
-      if (!query) seedIndex(page.items);
-      setData({ items: page.items, cursor: page.cursor, total: page.total, counts: page.counts ?? { all: 0, review: 0, mine: 0, guides: 0 }, repos: page.repos ?? [] });
-    } catch (e) { if (id === request.current) setError(e instanceof Error ? e.message : 'Could not load pull requests.'); }
-    finally { if (id === request.current) setLoading(false); }
+  const data = settings ? cache.read(settings, current) : null;
+  const loading = !data || (data.loading && !data.loadingMore) || (!data.loaded && !data.error), error = data?.error ?? '';
+  async function load(options: { more?: boolean; force?: boolean } = {}) {
+    if (!settings) return;
+    const page = await cache.load(settings, current, options);
+    if (!page) return;
+    remember(page.items); if (page.repos) onPage(page);
+    if (!options.more && !current.tab && !current.repo && !current.author && !current.drafts && sort === 'updated') seedIndex(page.items);
   }
-  async function loadMore() {
-    if (!data?.cursor || loadingMore || loading) return;
-    const id = request.current, cursor = data.cursor; setLoadingMore(true); setMoreError('');
-    try {
-      const page = await listPulls({ data: { ...filters, after: cursor } });
-      if (id !== request.current) return;
-      remember(page.items);
-      setData(previous => previous && previous.cursor === cursor ? { ...previous, items: [...previous.items, ...page.items.filter(pull => !previous.items.some(item => item.url === pull.url))], cursor: page.cursor } : previous);
-    } catch (e) { if (id === request.current) setMoreError(e instanceof Error ? e.message : 'Could not load more pull requests.'); }
-    finally { if (id === request.current) setLoadingMore(false); }
-  }
-  // Keep the counts in the heading and tabs while the new list loads, so the layout holds still.
-  useEffect(() => { if (configured) { setData(previous => previous && { ...previous, items: [], cursor: null }); void load(); } }, [query, configured, settings?.repos.join('|'), settings?.pageSize, settings?.showBots, settings?.showDrafts]);
+  useEffect(() => { if (configured) void load(); }, [cache, query, configured, settings?.repos.join('|'), settings?.pageSize, settings?.showBots, settings?.showDrafts]);
+  useEffect(() => { if (filters.sort) { setSavedSort(sort); writeStored(sortKey, sort); } }, [filters.sort, sort]);
   useEffect(() => {
-    // Fetch the next page shortly before the end of the list scrolls into view.
     const node = sentinel.current;
-    if (!node || !data?.cursor || moreError) return;
-    const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) void loadMore(); }, { rootMargin: '600px 0px' });
+    if (!node || !data?.cursor || data.loading || error) return;
+    const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) void load({ more: true }); }, { rootMargin: '600px 0px' });
     observer.observe(node); return () => observer.disconnect();
-  }, [data?.cursor, data?.items.length, loadingMore, moreError]);
+  }, [query, data?.cursor, data?.items.length, data?.loading, error]);
   const set = (key: keyof PullFilters, value: string) => void navigate(homeLink({ ...current, [key]: value }));
   if (configured === false) return <Onboarding onSettings={onSettings} />;
   const drafts = current.drafts || (settings?.showDrafts === false ? 'hidden' : 'shown');
-  const openTotal = data?.repos.reduce((sum, repo) => sum + repo.open, 0) ?? 0;
+  const openTotal = data?.repos?.reduce((sum, repo) => sum + repo.open, 0) ?? 0;
   const tab = tabLabels.find(([name]) => name === current.tab)?.[0] ?? 'all';
-  const sort: PullSort = current.sort === 'created' ? 'created' : current.sort === 'repo' ? 'repo' : 'updated';
   const groups = groupPulls(data?.items ?? [], sort, now);
   // Without a full list, author choices come from the PRs loaded so far.
   const authors = [...new Set([...(data?.items.map(pull => pull.author) ?? []), ...(current.author ? [current.author] : [])])].sort((a, b) => a.localeCompare(b));
   return <div className="home">
     <header className="page-heading">
       <h1>{current.repo || 'Pull requests'}</h1>
-      <span className="page-sub">{data ? (current.repo ? `${data.repos.find(repo => repo.repo === current.repo)?.open ?? 0} open` : `${openTotal} open across ${data.repos.length} ${data.repos.length === 1 ? 'repository' : 'repositories'}`) : <Skeleton className="h-4 w-52" />}</span>
+      <span className="page-sub">{data?.repos ? (current.repo ? `${data.repos.find(repo => repo.repo === current.repo)?.open ?? 0} open` : `${openTotal} open across ${data.repos.length} ${data.repos.length === 1 ? 'repository' : 'repositories'}`) : <Skeleton className="h-4 w-52" />}</span>
     </header>
     <div className="filters">
       <nav className="tabs" aria-label="Pull request lists">
         {tabLabels.map(([name, label]) => <Link key={name} {...homeLink({ ...current, tab: name === 'all' ? undefined : name })} className={tab === name ? 'is-active' : ''} aria-current={tab === name ? 'page' : undefined}>
-          {label}<span className="tab-count">{data ? data.counts[name] : <Skeleton className="h-3 w-5" />}</span>
+          {label}<span className="tab-count">{data?.counts ? data.counts[name] : <Skeleton className="h-3 w-5" />}</span>
         </Link>)}
       </nav>
       <Popover>
@@ -84,25 +70,26 @@ export function Home({ filters, settings, onPage, onSettings }: { filters: PullF
           <FilterCombobox label="Author" search="Find an author…" value={current.author} display={current.author || 'Anyone'} onChange={value => set('author', value)} options={[{ value: '', label: 'Anyone' }, ...authors.map(author => ({ value: author, label: author, icon: <Avatar login={author} size={16} /> }))]} />
           <FilterMenu label="Drafts" value={drafts} display={drafts === 'hidden' ? 'Hidden' : 'Shown'} onChange={value => set('drafts', value)} options={[{ value: 'shown', label: 'Show drafts' }, { value: 'hidden', label: 'Hide drafts' }]} />
           <Separator className="my-1" />
-          <FilterMenu label="Sort by" value={sort} display={sort === 'created' ? 'Recently created' : sort === 'repo' ? 'Repository' : 'Recently updated'} onChange={value => set('sort', value === 'updated' ? '' : value)} options={[{ value: 'updated', label: 'Recently updated' }, { value: 'created', label: 'Recently created' }, { value: 'repo', label: 'Repository' }]} />
+          <FilterMenu label="Sort by" value={sort} display={sort === 'created' ? 'Recently created' : sort === 'repo' ? 'Repository' : 'Recently updated'} onChange={value => set('sort', value)} options={[{ value: 'updated', label: 'Recently updated' }, { value: 'created', label: 'Recently created' }, { value: 'repo', label: 'Repository' }]} />
         </PopoverContent>
       </Popover>
     </div>
-    {error && !data?.items.length ? <div className="empty"><p>{error}</p><Button variant="ghost" size="xs" onClick={() => void load()}>Try again</Button></div>
+    {error && !data?.items.length ? <div className="empty"><p>{error}</p><Button variant="ghost" size="xs" onClick={() => void load({ more: data?.failedMore, force: true })}>Try again</Button></div>
       : !data || (loading && !data.items.length) ? <div className="pull-groups" aria-busy="true" aria-label="Loading pull requests"><section className="pull-group">
         <h2 className="pull-group-heading h-[18px]"><Skeleton className="h-3 w-28" /></h2>
         <ul className="pull-list">{Array.from({ length: 6 }, (_, i) => <li key={i}><PullRowSkeleton /></li>)}</ul>
       </section></div>
-      : data.items.length === 0 ? <div className="empty"><p>{data.total === 0 && tab === 'all' && !current.repo && !current.author ? 'No open pull requests in these repositories.' : 'No pull requests match these filters.'}</p>{(current.repo || current.author || current.tab || current.drafts) && <Link {...homeLink()} className={buttonVariants({ variant: 'ghost', size: 'xs' })}>Clear filters</Link>}</div>
-      : <div className={`pull-groups ${loading ? 'is-loading' : ''}`}>
+      : data.items.length === 0 && data.complete ? <div className="empty"><p>{data.total === 0 && tab === 'all' && !current.repo && !current.author ? 'No open pull requests in these repositories.' : 'No pull requests match these filters.'}</p>{(current.repo || current.author || current.tab || current.drafts) && <Link {...homeLink({ sort })} className={buttonVariants({ variant: 'ghost', size: 'xs' })}>Clear filters</Link>}</div>
+      : <div className="pull-groups" aria-busy={loading || undefined}>
         {groups.map(group => <section className="pull-group" key={group.key} aria-label={group.title}>
           <h2 className="pull-group-heading">{group.title}</h2>
           <ul className="pull-list">{group.items.map(pull => <PullRow key={`${pull.repo}#${pull.number}`} pull={pull} now={now} sort={sort} />)}</ul>
         </section>)}
-        {data.cursor && !moreError && <div ref={sentinel} aria-busy="true" aria-label="Loading more pull requests"><PullRowSkeleton /></div>}
+        {data.cursor && !error && <div ref={sentinel} aria-busy="true" aria-label="Loading more pull requests"><PullRowSkeleton /></div>}
       </div>}
-    {moreError && <div className="list-end"><span>{moreError}</span><Button variant="ghost" size="xs" onClick={() => void loadMore()}>Try again</Button></div>}
-    {data && !data.cursor && data.items.length > 0 && <div className="list-end">{data.items.length === 1 ? 'That’s the only one' : `That’s all ${data.items.length}`}</div>}
+    {loading && Boolean(data?.items.length) && <div className="list-end" role="status">{data?.loaded ? 'Updating pull requests…' : 'Loading remaining pull requests…'}</div>}
+    {error && Boolean(data?.items.length) && <div className="list-end"><span>{error}</span><Button variant="ghost" size="xs" onClick={() => void load({ more: data?.failedMore, force: true })}>Try again</Button></div>}
+    {data?.complete && !loading && data.items.length > 0 && <div className="list-end">{data.items.length === 1 ? 'That’s the only one' : `That’s all ${data.items.length}`}</div>}
   </div>;
 }
 

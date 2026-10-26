@@ -2,13 +2,14 @@ import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps, type 
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, ExternalLink, RotateCw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { openSession } from '../inbox.functions';
+import { listPulls, openSession } from '../inbox.functions';
 import { cancelAnalysis, getAnalysis, startAnalysis } from '../jobs.functions';
 import { getPull } from '../pull.functions';
 import { setSessionToken } from '../session';
 import { AppContext, useApplication } from './application-context';
 import { recall } from './browser-state';
 import { hiddenPaths } from './file-filters';
+import { InboxCache } from './inbox-cache';
 import { homeLink, pullLink, type PullTarget } from './links';
 import { CommandPalette } from './palette';
 import { AppShell } from './shell';
@@ -21,6 +22,7 @@ const loadPullView = () => import('./pull');
 const PullView = lazy(() => loadPullView().then(module => ({ default: module.PullView })));
 
 function useAppState() {
+  const [inbox] = useState(() => new InboxCache(query => listPulls({ data: query })));
   const [connection, setConnection] = useState<'connecting' | 'ready' | 'offline'>('connecting');
   const [settings, setSettings] = useState<Settings | null>(null), [repoCounts, setRepoCounts] = useState<Record<string, number> | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -80,7 +82,7 @@ function useAppState() {
     catch (e) { setJobError(e instanceof Error ? e.message : 'Cancellation failed.'); setJob(null); }
   }
   const onPage = (page: PullList) => { if (page.repos) setRepoCounts(Object.fromEntries(page.repos.map(repo => [repo.repo, repo.open]))); };
-  return { connection, settings, setSettings, repoCounts, onPage, paletteOpen, setPaletteOpen, openPalette: () => setPaletteOpen(true), pulls, setPulls, loadError, load, confirmedPull, isPullConfirmed, job, jobError, jobKey, analyzing, epoch, currentJob, analyze, cancel };
+  return { inbox, connection, settings, setSettings, repoCounts, onPage, paletteOpen, setPaletteOpen, openPalette: () => setPaletteOpen(true), pulls, setPulls, loadError, load, confirmedPull, isPullConfirmed, job, jobError, jobKey, analyzing, epoch, currentJob, analyze, cancel };
 }
 
 export type ApplicationState = ReturnType<typeof useAppState>;

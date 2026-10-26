@@ -6,7 +6,7 @@ A PR with a saved analysis shows a Guide: sections that group changed files by i
 
 - `guide-sections` renders saved sections with titles, explanations and diffs.
 - `guide-rail` shows one tick per section and marks the current one.
-- `guide-chip` opens and scrolls to a file's diff from its chip.
+- `guide-chip` opens and scrolls to a file's diff from its chip and highlights its saved reference. A new gutter selection replaces that highlight.
 - `guide-keys` moves to the next or previous section with `j` / `k`, landing it at 64px.
 - `guide-expansion` opens unviewed blocks initially and keeps expansion independent of Diff.
 - `guide-scroll` lets wheel scrolling continue onto the page at both ends of a long explanation.

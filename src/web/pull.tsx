@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
+import type { SelectedLineRange } from '@pierre/diffs';
 import { Check, ChevronDown, ChevronRight, CircleX, Clock, Eye, EyeOff, FileCode2, GitBranch, ListChecks, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,11 +24,12 @@ import type { AppSidebar } from './shell';
 import { ReviewLayout } from './review-layout';
 import { inline, Markdown } from './markdown';
 import { fileAnchor, ReviewContext, scrollPageBy, splitPath } from './pull-page';
-import type { ChangedFile, Chapter, PullDetail, Reference, ReviewEvent, Snapshot } from '../types';
+import type { ChangedFile, Chapter, PullDetail, ReviewEvent, Snapshot } from '../types';
 
 // Heights of the sticky top bar and the diff toolbar, so scrolled-to content lands below them.
 const topbar = 48, toolbar = 44, initiallyOpen = 12;
 type DiffView = Exclude<PullViewName, 'overview'>;
+type LineSelection = { path: string; range: SelectedLineRange };
 const orderKey = 'pr-guide:file-order';
 // Jumps instantly, then re-aligns while the diff virtualizer swaps estimated heights for measured ones above the target.
 function scrollToElement(target: string | (() => Element | null), offset: number, center = false) {
@@ -86,7 +88,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   const [find, setFind] = useState({ open: false, query: '', index: 0, focus: 0 });
   const [previewed, setPreviewed] = useState<string[]>([]);
   const setFilePreview = useCallback((path: string, preview: boolean) => setPreviewed(previous => preview ? [...new Set([...previous, path])] : previous.filter(value => value !== path)), []);
-  const [selected, setSelected] = useState<Reference | null>(null), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
+  const [selected, setSelected] = useState<Record<DiffView, LineSelection | null>>({ diff: null, guide: null }), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
   // A jump focuses one comment. Focus belongs to the comment mode it was set in, so switching modes never opens a popover on its own.
   const [focused, setFocused] = useState<{ anchor: string; mode: string } | null>(null);
   const focus = focused?.mode === display.comments ? focused.anchor : null;
@@ -132,6 +134,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   }, [items.join('|'), offset, view, sidebarVisible]);
   const files = new Map(snapshot.files.map(file => [file.path, file]));
   const diffView: DiffView = view === 'guide' ? 'guide' : 'diff';
+  const selectLines = useCallback((path: string, range: SelectedLineRange | null) => setSelected(previous => ({ ...previous, [diffView]: range ? { path, range } : null })), [diffView]);
   const setFileViewed = useCallback((paths: string[], value: boolean) => {
     setViewed(previous => value ? [...new Set([...previous, ...paths])] : previous.filter(path => !paths.includes(path)));
     if (value) setOpen(previous => ({ ...previous, [diffView]: previous[diffView].filter(path => !paths.includes(path)) }));
@@ -143,7 +146,11 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     const targetView = view === 'guide' && chapters.some(chapter => chapter.files.includes(path)) ? 'guide' : 'diff';
     setOpen(previous => ({ ...previous, [targetView]: [...new Set([...previous[targetView], path])] }));
     if (view !== targetView) void navigate(pullLink(repo, number, targetView));
-    if (targetView === 'guide') { setFilePreview(path, false); setSelected(guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path) ?? null); }
+    if (targetView === 'guide') {
+      setFilePreview(path, false);
+      const reference = guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path);
+      setSelected(previous => ({ ...previous, guide: reference ? { path, range: { start: reference.startLine, end: reference.endLine, side: reference.side === 'new' ? 'additions' : 'deletions' } } : null }));
+    }
     if (isMobile) setOpenMobile(false);
     requestAnimationFrame(() => scrollToElement(fileAnchor(path), targetView === 'diff' ? topbar + toolbar + 16 : topbar + 16, targetView === 'guide'));
   }
@@ -249,7 +256,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
         {guide ? <>
           <nav className="section-rail" aria-label="Sections">{chapters.map((chapter, index) => <Tip key={chapter.id} content={`${index + 1}. ${chapter.title}`} delay="instant" side="right"><button type="button" className={`${index === current ? 'is-current' : ''} ${done.includes(chapter.id) ? 'is-done' : ''}`} onClick={() => scrollToElement(chapter.id, offset)} aria-label={`Section ${index + 1}: ${chapter.title}`} aria-current={index === current ? 'location' : undefined} /></Tip>)}</nav>
           <div className="chapters">{chapters.map((chapter, index) => <ChapterSection key={chapter.id} chapter={chapter} index={index} total={chapters.length} done={done.includes(chapter.id)} files={chapter.files.map(path => files.get(path)!)} onMark={checked => setFileViewed(chapter.files, checked)} onFile={pickFile}
-            diffs={chapter.files.map(path => <DiffCard key={path} file={files.get(path)!} open={open.guide.includes(path)} viewed={viewed.includes(path)} onToggle={toggle} onViewed={markViewed} display={display} reference={selected?.path === path ? selected : null} preview={previewed.includes(path)} onPreview={setFilePreview} />)} />)}</div>
+            diffs={chapter.files.map(path => <DiffCard key={path} file={files.get(path)!} open={open.guide.includes(path)} viewed={viewed.includes(path)} onToggle={toggle} onViewed={markViewed} display={display} selectedLines={selected.guide?.path === path ? selected.guide.range : null} onSelectionChange={selectLines} preview={previewed.includes(path)} onPreview={setFilePreview} />)} />)}</div>
         </> : <AnalyzePrompt analyzing={analyzing} prior={detail.prior} onAnalyze={() => onAnalyze(false)} />}
       </div>
       : <div className="diff-page">
@@ -259,7 +266,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
           <span className="toolbar-actions"><span className="toolbar-progress">{linesLeft.toLocaleString()} {linesLeft === 1 ? 'line' : 'lines'} left</span>{displayMenu}</span>
         </div>
         <div className="diff-body">
-          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} reference={null} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
+          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} selectedLines={selected.diff?.path === file.path ? selected.diff.range : null} onSelectionChange={selectLines} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
         </div>
       </div>}
     {find.open && view !== 'overview' && <FindBar query={find.query} onQuery={query => setFind(previous => ({ ...previous, query, index: 0 }))} count={matches.length} current={findIndex} onStep={stepMatch}

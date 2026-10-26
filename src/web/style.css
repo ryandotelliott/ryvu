@@ -91,7 +91,6 @@ mark { background: none; color: var(--primary); font-weight: 650; }
 .tabs a:hover, .tabs a.is-active { background: var(--hover); color: var(--foreground); }
 .tab-count { font-size: 11px; font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .list-options { flex-shrink: 0; margin-bottom: 7px; margin-left: auto; }
-.pull-groups { transition: opacity .15s; } .pull-groups.is-loading { opacity: .6; }
 .pull-group + .pull-group { margin-top: 24px; }
 .pull-group-heading { display: flex; align-items: center; gap: 8px; margin: 16px 12px 8px; font-size: 12px; font-weight: 500; color: var(--text-3); }
 .pull-list { list-style: none; margin: 0; padding: 0; }

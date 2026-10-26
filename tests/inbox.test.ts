@@ -6,8 +6,9 @@ import test from 'node:test';
 import { Inbox } from '../src/pulls.js';
 import { Store } from '../src/store.js';
 import { groupPulls } from '../src/web/home-groups.js';
+import { InboxCache } from '../src/web/inbox-cache.js';
 import type { Runner } from '../src/process.js';
-import type { PullQuery, PullSummary, Settings } from '../src/types.js';
+import type { PullPage, PullQuery, PullSummary, Settings } from '../src/types.js';
 
 function pull(number: number, at: Date, repo = 'org/a'): PullSummary {
   return { repo, number, title: `Pull ${number}`, author: 'alice', authorIsBot: false, isDraft: false, state: 'open', createdAt: at.toISOString(), updatedAt: at.toISOString(), additions: 1, deletions: 0, branch: 'main', url: `https://github.com/${repo}/pull/${number}`, reviewRequested: false, mine: true, guide: null };
@@ -96,4 +97,97 @@ test('repository sorting preserves author, draft and review filters', async () =
     await assert.rejects(inbox.page(settings, { sort: 'repo', after: 'repo:99:' }), /Invalid page cursor/);
     await assert.rejects(inbox.page(settings, { sort: 'repo', after: 'garbage' }), /Invalid page cursor/);
   });
+});
+
+const cacheSettings: Settings = { repos: ['org/a', 'org/b'], pageSize: 10, showDrafts: true, showBots: true };
+function cachedPage(items: PullSummary[], cursor: string | null = null): PullPage {
+  return { items, cursor, total: 20, counts: { all: 20, mine: 10, review: 5, guides: 3 }, repos: [{ repo: 'org/a', open: 20, review: 5 }], errors: [] };
+}
+function pendingCache() {
+  const requests: { query: PullQuery; resolve: (page: PullPage) => void; reject: (error: Error) => void }[] = [];
+  const cache = new InboxCache(query => new Promise((resolve, reject) => requests.push({ query, resolve, reject })));
+  return { cache, requests };
+}
+
+test('tabs immediately derive partial matches, then merge and sort pages without duplicates', async () => {
+  const { cache, requests } = pendingCache();
+  const a = { ...pull(1, new Date('2026-01-01')), guide: { key: 'a', chapters: 1 }, reviewRequested: true };
+  const b = { ...pull(2, new Date('2026-01-03')), mine: false };
+  const c = pull(3, new Date('2026-01-02'));
+  const initial = cache.load(cacheSettings, {});
+  requests[0].resolve(cachedPage([b, a], 'next-all')); await initial;
+  assert.deepEqual(cache.read(cacheSettings, { tab: 'mine' }).items.map(p => p.number), [1]);
+  assert.deepEqual(cache.read(cacheSettings, { tab: 'review' }).items.map(p => p.number), [1]);
+  assert.deepEqual(cache.read(cacheSettings, { tab: 'guides' }).items.map(p => p.number), [1]);
+  assert.equal(cache.read(cacheSettings, { tab: 'mine' }).complete, false);
+  const mine = cache.load(cacheSettings, { tab: 'mine' });
+  assert.equal(cache.load(cacheSettings, { tab: 'mine' }), mine, 'concurrent callers share the same request');
+  assert.equal(cache.read(cacheSettings, { tab: 'mine' }).loading, true);
+  requests[1].resolve(cachedPage([c, a], 'next-mine')); await mine;
+  assert.deepEqual(cache.read(cacheSettings, { tab: 'mine' }).items.map(p => p.number), [3, 1]);
+  assert.deepEqual(cache.read(cacheSettings, {}).items.map(p => p.number), [2, 3, 1]);
+  const more = cache.load(cacheSettings, { tab: 'mine' }, { more: true });
+  assert.equal(requests[2].query.after, 'next-mine');
+  requests[2].resolve(cachedPage([a], null)); await more;
+  assert.deepEqual(cache.read(cacheSettings, { tab: 'mine' }).items.map(p => p.number), [3, 1]);
+  assert.equal(cache.read(cacheSettings, { tab: 'mine' }).complete, true);
+  await cache.load(cacheSettings, { tab: 'mine' });
+  assert.equal(requests.length, 3, 'fresh revisits do not refetch');
+});
+
+test('cached rows respect filters and use the same tie breakers across tabs and sort modes', async () => {
+  const { cache, requests } = pendingCache();
+  const a = pull(1, new Date('2026-01-01'), 'org/b');
+  const b = { ...pull(2, new Date('2026-01-02')), createdAt: '2025-01-01T00:00:00.000Z' };
+  const c = { ...pull(3, new Date('2026-01-02')), isDraft: true };
+  const d = { ...pull(4, new Date('2026-01-04')), authorIsBot: true, author: 'bot[bot]', mine: false };
+  const initial = cache.load(cacheSettings, {});
+  requests[0].resolve(cachedPage([a, b, c, d])); await initial;
+  assert.deepEqual(cache.read(cacheSettings, { tab: 'mine' }).items.map(p => p.number), [3, 2, 1]);
+  assert.deepEqual(cache.read(cacheSettings, { sort: 'created' }).items.map(p => p.number), [4, 3, 1, 2]);
+  assert.deepEqual(cache.read(cacheSettings, { sort: 'repo' }).items.map(p => p.number), [4, 3, 2, 1]);
+  assert.deepEqual(cache.read(cacheSettings, { tab: 'mine', drafts: 'hidden', repo: 'org/a' }).items.map(p => p.number), [2]);
+  assert.equal(cache.read({ ...cacheSettings, showBots: false }, {}).items.length, 0, 'new settings never expose the old scope');
+});
+
+test('late responses cannot overwrite newer rows, counts, or a changed repository scope', async () => {
+  const { cache, requests } = pendingCache();
+  const old = cache.load(cacheSettings, {});
+  const recent = cache.load(cacheSettings, { tab: 'mine' });
+  requests[1].resolve({ ...cachedPage([pull(1, new Date('2026-01-02'))]), counts: { all: 21, mine: 11, review: 5, guides: 3 } }); await recent;
+  requests[0].resolve(cachedPage([pull(1, new Date('2026-01-01'))])); await old;
+  assert.equal(cache.read(cacheSettings, {}).items[0].updatedAt, '2026-01-02T00:00:00.000Z');
+  assert.equal(cache.read(cacheSettings, {}).counts?.all, 21);
+  const stale = cache.load(cacheSettings, {}, { force: true });
+  const settings = { ...cacheSettings, repos: ['org/b'] };
+  const changed = cache.load(settings, {});
+  requests[3].resolve(cachedPage([pull(2, new Date(), 'org/b')])); await changed;
+  requests[2].resolve(cachedPage([pull(1, new Date())])); await stale;
+  assert.deepEqual(cache.read(settings, {}).items.map(p => p.repo), ['org/b']);
+});
+
+test('failed pagination preserves cached rows and retries the same cursor', async () => {
+  const { cache, requests } = pendingCache();
+  const initial = cache.load(cacheSettings, {});
+  requests[0].resolve(cachedPage([pull(1, new Date())], 'next')); await initial;
+  const more = cache.load(cacheSettings, {}, { more: true });
+  requests[1].reject(new Error('temporary failure')); await more;
+  const view = cache.read(cacheSettings, {});
+  assert.equal(view.items.length, 1); assert.equal(view.error, 'temporary failure'); assert.equal(view.failedMore, true);
+  const retry = cache.load(cacheSettings, {}, { more: view.failedMore, force: true });
+  assert.equal(requests[2].query.after, 'next');
+  requests[2].resolve(cachedPage([pull(2, new Date())])); await retry;
+  assert.equal(cache.read(cacheSettings, {}).items.length, 2);
+});
+
+test('a complete refresh drops stale rows while newer results can populate another completed tab', async () => {
+  const { cache, requests } = pendingCache();
+  const initial = cache.load(cacheSettings, {});
+  requests[0].resolve(cachedPage([pull(1, new Date())])); await initial;
+  const mine = cache.load(cacheSettings, { tab: 'mine' });
+  requests[1].resolve(cachedPage([pull(2, new Date())])); await mine;
+  assert.equal(cache.read(cacheSettings, {}).items.length, 2);
+  const refresh = cache.load(cacheSettings, {}, { force: true });
+  requests[2].resolve(cachedPage([pull(2, new Date())])); await refresh;
+  assert.deepEqual(cache.read(cacheSettings, {}).items.map(p => p.number), [2]);
 });

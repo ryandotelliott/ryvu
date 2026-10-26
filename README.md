@@ -22,6 +22,8 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 
 Revisiting a PR in the same tab shows its last loaded content immediately while refreshing it from GitHub. A full page reload clears this in-memory cache; saved analysis still remains in SQLite.
 
+The four PR lists share their loaded rows. Switching tabs shows known matches immediately and fetches that list's remaining results in the background. New results are merged without duplicates using the same sort order. The sort choice is remembered in this browser across tabs, navigation and reloads.
+
 **Reviewing:** hover a line number and click **+** to comment (drag across line numbers for a range). Comments stay pending in the local database until you open **Review** and submit them with Comment, Approve or Request changes. Replies to existing threads post immediately. These are the only GitHub writes, and they happen only when you submit.
 
 ## What it covers
@@ -35,7 +37,7 @@ Revisiting a PR in the same tab shows its last loaded content immediately while 
 - Markdown file headers have an icon button to toggle preview. Preview reads the full file at the PR's head commit, renders Mermaid diagrams and highlights fenced code with the diff viewer's light/dark themes. Deleted files preview the base version. Raw HTML is skipped and images open as links.
 - shadcn base-nova components backed by Base UI (buttons, checkbox, menus, popovers, dialog, switch).
 - Analyzed guides and pending review comments are stored in SQLite at `.data/ryvu.db` (Node's built-in `node:sqlite`, no extra service). Guides from the earlier `.data/cache` files are imported when the server first opens the database.
-- Settings (repositories and home page preferences) are stored in `.data/settings.json`; the open-PR list is cached in memory for a minute.
+- Settings (repositories, page size and default visibility) are stored in `.data/settings.json`. PR list responses are cached for 30 seconds, and loaded browser rows remain available until a full page reload.
 - PR descriptions and comments render a safe Markdown subset (no raw HTML).
 - Cancel an active generation; a newer request supersedes an earlier one for this browser session.
 - Local progress and private, SHA/model/prompt-version-specific guide cache in `.data/cache`.
