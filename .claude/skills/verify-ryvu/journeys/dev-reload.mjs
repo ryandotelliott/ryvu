@@ -84,9 +84,12 @@ export default async function (ctx) {
   const editGetPull = () => hotEdit('src/pull.functions.ts', text => text.replace('return service.detail(data, inbox.login(), new AbortController().signal); });', `return service.detail(data, inbox.login(), new AbortController().signal).then(detail => ({ ...detail, snapshot: { ...detail.snapshot, title: \`${PROBE} getPull: \${detail.snapshot.title}\` } })); });`), 'the getPull edit');
   const drawn = (card, text) => page.evaluate(([card, text]) => [...document.getElementById(card)?.querySelector('diffs-container')?.shadowRoot?.querySelectorAll('[data-line][data-line-type="change-addition"]') ?? []].some(row => row.textContent === text && row.getClientRects().length > 0), [card, text]);
   const listShows = async n => {
-    await page.getByRole('button', { name: 'Refresh pull requests' }).click();
+    const lists = page.getByRole('navigation', { name: 'Pull request lists' });
+    await lists.getByRole('link', { name: /^Authored by me/ }).click();
+    await page.waitForURL(url => url.searchParams.get('tab') === 'mine');
+    await lists.getByRole('link', { name: /^All open/ }).click();
     await page.locator('.pull-title', { hasText: `${PROBE} ${n}:` }).first().waitFor({ timeout: 30_000 });
-    ctx.check(await kept(), `after a Refresh the list shows titles that edit ${n} of listPulls returned`);
+    ctx.check(await kept(), `returning to All open shows titles that edit ${n} of listPulls returned`);
   };
 
   rmSync(record('codex.log'), { force: true });

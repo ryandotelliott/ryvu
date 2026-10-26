@@ -47,4 +47,5 @@ Preconditions:
 - Hidden-file patterns persist per repository in localStorage; a fresh Playwright profile has none, but the sidebar may list fewer files than the PR if a journey sets one.
 - Short files never scroll far enough for their header to stick; the journey notes that instead of failing.
 - The `0/M reviewed` count excludes hidden files.
+- Viewed state is shared with Guide and stored in this browser's localStorage per PR and head commit, without GitHub synchronization. Expansion choices are separate between the tabs.
 - Screenshots at rest miss scroll leaks, because the compositor scrolls ahead of the main thread for a few frames. Anything that switches a header's look from script on scroll lagged like that, so pinning is pure CSS. Judge leaks from screencast frames only.

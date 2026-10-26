@@ -2,6 +2,7 @@ import { linkOptions } from '@tanstack/react-router';
 import type { PullFilters } from '../types';
 
 export type PullViewName = 'overview' | 'guide' | 'diff';
+export const pullViews = [['overview', 'Overview'], ['guide', 'Guide'], ['diff', 'Diff']] as const;
 const filterKeys = ['tab', 'repo', 'author', 'drafts', 'sort'] as const;
 
 export function homeSearch(search: Partial<Record<string, unknown>>): PullFilters {

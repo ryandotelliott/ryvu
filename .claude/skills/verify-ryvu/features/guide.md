@@ -1,6 +1,6 @@
 # Guide
 
-A PR with a saved analysis shows a Guide: sections that group changed files by intent, each with an explanation beside its diffs. File chips jump to a diff, `j`/`k` move between sections, and a rail on the left marks each section.
+A PR with a saved analysis shows a Guide: sections that group changed files by intent, each with an explanation beside its diffs. Unviewed code blocks start expanded, and expansion choices are separate from the Diff tab. File chips jump to a diff, `j`/`k` move between sections, and a rail on the left marks each section.
 
 ## Sub-features
 
@@ -8,6 +8,7 @@ A PR with a saved analysis shows a Guide: sections that group changed files by i
 - `guide-rail` shows one tick per section and marks the current one.
 - `guide-chip` opens and scrolls to a file's diff from its chip.
 - `guide-keys` moves to the next or previous section with `j` / `k`, landing it at 64px.
+- `guide-expansion` opens unviewed blocks initially and keeps expansion independent of Diff.
 
 ## How to get to it (user POV)
 
@@ -23,7 +24,8 @@ Preconditions:
 
 - **Sections.** `go('/pr/…/guide')`, wait for `.section-rail button`. `.chapter-section` count equals the rail's button count and is above 0.
 - **Chip.** Click the first section's first `.chapter-file`. The diff card with that file name is `.expanded` and on screen.
-- **Keys.** Click the page body, press `j`. Some `.chapter-section` top is 64px (±2).
+- **Keys.** Click the noninteractive title in the top bar, then press `j`. Some `.chapter-section` top is 64px (±2).
+- **Expansion** (`journeys/expansion.mjs`). Toggle files and bulk controls in both tabs; marking a file viewed collapses it only in the active tab. Reload and check that viewed blocks start collapsed and unviewed blocks start expanded.
 - **Proof.** Screenshots of the Guide and the position after `j`.
 
 ## Gotchas

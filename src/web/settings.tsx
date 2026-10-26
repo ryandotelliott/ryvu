@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { addRepository, listPulls, saveSettings } from '../inbox.functions';
 import { forgetIndex } from './browser-state';
-import { RepoSwatch, Segmented, Switch, Tip, repoColor } from './ui';
+import { Segmented, Switch, Tip } from './ui';
 import type { PullPage, Settings } from '../types';
 
 export function AddRepoForm({ onAdded, autoFocus }: { onAdded: (settings: Settings) => void; autoFocus?: boolean }) {
@@ -22,7 +22,7 @@ export function AddRepoForm({ onAdded, autoFocus }: { onAdded: (settings: Settin
         <InputGroupAddon><BookMarked /></InputGroupAddon>
         <InputGroupInput aria-label="Repository" aria-invalid={Boolean(error)} value={value} onChange={e => { setValue(e.target.value); setError(''); }} placeholder="owner/repo or a GitHub URL" autoComplete="off" spellCheck={false} autoFocus={autoFocus} className="font-mono" />
       </InputGroup>
-      <Button type="submit" size="lg" disabled={!value.trim() || busy}>{busy ? <LoaderCircle className="spinner" /> : <Plus />}{busy ? 'Checking' : 'Add'}</Button>
+      <Button type="submit" variant="link" size="lg" className="text-muted-foreground hover:text-foreground hover:no-underline focus-visible:text-foreground" disabled={!value.trim() || busy}>{busy ? <LoaderCircle className="spinner" /> : <Plus />}{busy ? 'Checking' : 'Add'}</Button>
     </div>
     {error && <p className="field-error" role="alert">{error}</p>}
   </form>;
@@ -65,7 +65,6 @@ export function SettingsPage({ settings, onSettings }: { settings: Settings | nu
             const next = event.key === 'ArrowUp' ? move(repo, -1) : event.key === 'ArrowDown' ? move(repo, 1) : null;
             if (next) { event.preventDefault(); void save({ ...settings, repos: next }); requestAnimationFrame(() => (event.target as HTMLElement).focus()); }
           }}><GripVertical size={14} /></button>
-          <RepoSwatch color={repoColor(settings.repos, repo)} size={10} />
           <div className="repo-text"><a href={`https://github.com/${repo}`} target="_blank" rel="noreferrer">{repo}</a><span>{describe(repo)}</span></div>
           <Tip content="Remove"><Button variant="ghost" size="icon" aria-label={`Remove ${repo}`} onClick={() => void save({ ...settings, repos: settings.repos.filter(value => value !== repo) })}><X size={14} /></Button></Tip>
         </li>)}
