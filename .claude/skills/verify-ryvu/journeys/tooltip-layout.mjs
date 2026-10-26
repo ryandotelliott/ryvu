@@ -7,6 +7,25 @@ export default async function (ctx) {
   const unbroken = files.find(file => file.path.split('/').at(-1).length > 40 && !file.path.includes('-'));
   ctx.check(Boolean(wrapped && unbroken), 'the PR has long hyphenated and unbroken file paths');
   await ctx.go(`${path}/diff`); await ctx.waitForDiffRows();
+  const tabs = page.getByRole('navigation', { name: 'View', exact: true });
+  for (const [label, trigger] of [
+    ['Diff', tabs.getByRole('link', { name: 'Diff', exact: true })],
+    ['Guide', tabs.getByRole('link', { name: 'Guide', exact: true })],
+    ['Overview', tabs.getByRole('link', { name: 'Overview', exact: true })],
+    ['Hide sidebar', page.getByRole('button', { name: 'Hide sidebar', exact: true })],
+    ['Search files', page.getByRole('button', { name: 'Search files', exact: true })],
+  ]) {
+    await trigger.hover();
+    const popup = page.locator('[data-slot="tooltip-content"][data-open]').filter({ hasText: label });
+    await popup.waitFor();
+    const singleLine = await popup.evaluate(async el => {
+      await Promise.allSettled(el.getAnimations({ subtree: true }).map(animation => animation.finished));
+      const text = el.querySelector('span');
+      return text.getBoundingClientRect().height <= parseFloat(getComputedStyle(text).lineHeight) + 1;
+    });
+    ctx.check(singleLine, `the short tooltip "${label}" stays on one line`);
+    await ctx.shot(`short-${label.replaceAll(' ', '-')}`);
+  }
   await page.getByRole('button', { name: 'File list display', exact: true }).click();
   await page.getByRole('button', { name: 'Diff order', exact: true }).click();
   await page.keyboard.press('Escape');

@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { ChevronDown, ChevronUp, FoldVertical, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { Toggle } from '@/components/ui/toggle';
 import { fileAnchor, scrollPageBy } from './pull-page';
 import { Tip } from './ui';
 import type { ChangedFile } from '../types';
@@ -91,7 +90,7 @@ export function scrollToMatch(match: FindMatch, offset: number) {
   step();
 }
 
-export function FindBar({ query, onQuery, count, current, onStep, includeCollapsed, onIncludeCollapsed, onClose, focusKey }: { query: string; onQuery: (query: string) => void; count: number; current: number; onStep: (direction: 1 | -1) => void; includeCollapsed: boolean; onIncludeCollapsed: (value: boolean) => void; onClose: () => void; focusKey: number }) {
+export function FindBar({ query, onQuery, count, current, onStep, onClose, focusKey }: { query: string; onQuery: (query: string) => void; count: number; current: number; onStep: (direction: 1 | -1) => void; onClose: () => void; focusKey: number }) {
   const input = useRef<HTMLInputElement>(null);
   // Pressing ⌘F again re-focuses and selects the query.
   useEffect(() => { input.current?.focus(); input.current?.select(); }, [focusKey]);
@@ -101,7 +100,6 @@ export function FindBar({ query, onQuery, count, current, onStep, includeCollaps
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); onStep(event.shiftKey ? -1 : 1); } if (event.key === 'Escape') { event.preventDefault(); onClose(); } }} />
       <InputGroupAddon align="inline-end" className="find-count">{query ? (count ? `${current + 1} of ${count}` : 'No results') : ''}</InputGroupAddon>
     </InputGroup>
-    <Tip content="Search collapsed files" side="bottom"><Toggle size="sm" pressed={includeCollapsed} onPressedChange={onIncludeCollapsed} aria-label="Search collapsed files"><FoldVertical /></Toggle></Tip>
     <Tip content="Previous match" hotkey="⇧↵" side="bottom"><Button variant="ghost" size="icon-sm" aria-label="Previous match" disabled={!count} onClick={() => onStep(-1)}><ChevronUp /></Button></Tip>
     <Tip content="Next match" hotkey="↵" side="bottom"><Button variant="ghost" size="icon-sm" aria-label="Next match" disabled={!count} onClick={() => onStep(1)}><ChevronDown /></Button></Tip>
     <Tip content="Close" hotkey="Esc" side="bottom"><Button variant="ghost" size="icon-sm" aria-label="Close find" onClick={onClose}><X /></Button></Tip>

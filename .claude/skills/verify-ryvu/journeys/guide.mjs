@@ -19,6 +19,20 @@ export default async function (ctx) {
   const sections = await page.locator('.chapter-section').count();
   ctx.check(sections > 0, `the Guide shows ${sections} sections`);
   ctx.check(await page.locator('.section-rail button').count() === sections, 'the section rail has one tick per section');
+  ctx.check(await page.getByText(/Scope and limitations/).count() === 0, 'the Guide has no Scope and limitations control or section');
+  ctx.check(await page.getByText(/^Questions to consider/).count() === 0, 'the Guide has no Questions to consider sections');
+  ctx.check(await page.getByText(/^(\d+ of \d+ sections left to review|All \d+ sections reviewed)$/).count() === 0, 'the Guide has no bottom review-progress panel');
+  const fullWidth = await page.locator('.guide-page').evaluate(element => {
+    const bounds = element.getBoundingClientRect(), css = getComputedStyle(element);
+    const left = bounds.left + parseFloat(css.paddingLeft), right = bounds.right - parseFloat(css.paddingRight);
+    return ['.guide-head', '.review-summary'].every(selector => {
+      const child = element.querySelector(selector);
+      if (!child) return selector === '.review-summary';
+      const box = child.getBoundingClientRect();
+      return Math.abs(box.left - left) < 1 && Math.abs(box.right - right) < 1;
+    });
+  });
+  ctx.check(fullWidth, 'the Guide header and summary fill the content width');
   await ctx.shot('guide');
 
   const chip = page.locator('.chapter-section').first().locator('.chapter-file').first();
@@ -28,10 +42,14 @@ export default async function (ctx) {
   ctx.check(card && card.expanded && card.top < 900, `clicking the "${name}" chip opens its diff on screen`);
 
   if (sections > 1) {
-    await page.locator('body').click({ position: { x: 20, y: 880 } });
+    await page.locator('.pr-topbar .topbar-title').click();
     await page.keyboard.press('j'); await page.waitForTimeout(1200);
     const tops = await page.evaluate(() => [...document.querySelectorAll('.chapter-section')].map(s => Math.round(s.getBoundingClientRect().top)));
     ctx.check(tops.some(top => Math.abs(top - 64) <= 2), `j brings a section to the top (section tops: ${tops.slice(0, 4).join(', ')})`);
   }
   await ctx.shot('after-jump');
+  await page.locator('.chapter-section').first().locator('.chapter-reviewed [role="checkbox"]').click();
+  await page.locator('.chapter-section.is-done').first().waitFor();
+  ctx.check(await page.getByRole('button', { name: 'Next section', exact: true }).count() === 0, 'marking a section reviewed does not add a Next section button');
+  await ctx.shot('reviewed-section');
 }

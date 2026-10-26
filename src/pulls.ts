@@ -1,6 +1,7 @@
 import { fields, parseReference, parseRepo, UserError } from './domain.js';
 import type { Store } from './store.js';
 import { runCommand, type Runner } from './process.js';
+import { comparePulls } from './pull-list.js';
 import type { GuideStatus, IndexedPull, PullPage, PullQuery, PullSummary, PullTab, Resolution, Settings } from './types.js';
 const FRESH_FOR = 60_000;
 type Stored = Omit<PullSummary, 'guide'> & { baseSHA: string; headSHA: string };
@@ -142,7 +143,7 @@ export class Inbox {
       total = Number(page.issueCount) || 0; cursor = page.pageInfo?.hasNextPage ? String(page.pageInfo.endCursor) : null;
     }
     const value: PullPage = {
-      items, total, cursor, errors: [],
+      items: items.sort((a, b) => comparePulls(sort, a, b)), total, cursor, errors: [],
       counts: first ? { all: Number(data.all?.issueCount) || 0, review: Number(data.review?.issueCount) || 0, mine: Number(data.mine?.issueCount) || 0, guides: guided.length } : null,
       repos: first ? settings.repos.map((name, i) => ({ repo: name, open: Number(data[`r${i}`]?.issueCount) || 0, review: Number(data[`q${i}`]?.issueCount) || 0 })) : null
     };

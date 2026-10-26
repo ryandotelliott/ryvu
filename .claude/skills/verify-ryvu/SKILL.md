@@ -69,9 +69,14 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 `<journey>` is a file in `journeys/`. Exit code 0 means every check passed. Every run also fails on an uncaught page error or a Content-Security-Policy violation.
 
 - Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`.
+- `expansion` (needs `VERIFY_GUIDE_PR`): unviewed Guide blocks start expanded; manual toggles, viewed actions and bulk controls preserve the other tab's expansion; viewed state survives reloads.
+- `guide-scroll` (needs `VERIFY_GUIDE_PR` with a long explanation): wheel scrolling continues onto the page at both edges of the explanation, including in a short viewport.
+- `selection` (needs `VERIFY_GUIDE_PR` with a multi-line reference): gutter clicks replace Guide highlights, repeated clicks clear selection, ranges survive redraws and tab switching, and a multi-line local draft survives reload. It deletes the draft without submitting a review.
+- `loading` (needs `VERIFY_GUIDE_PR`): inbox placeholder heights at desktop and mobile widths, solid code placeholders, cached PR revisits during a delayed refresh, local drafts preserved during that refresh, and the Analyze shortcut reusing a saved Guide after refreshing.
 - `review-sidebar`: full-height app navigation and files on all review views, compact folder labels, resizing and saved width, file search, file display settings, shadcn collapse controls, and the mobile Sheet.
 - `inbox-options`: nested list controls, searchable repository and author subpanels, date/repository sections, paginated ordering and narrow-screen fitting.
-- `tooltip-layout`: long file paths wrap inside a tooltip that fits the longest line; keyboard hints stay visible, including on a narrow viewport.
+- `inbox-cache`: cached matches appear during delayed tab requests, partial lists do not claim completion, merged rows stay ordered and unique, and sort survives tab changes, navigation and reload.
+- `tooltip-layout`: short control labels stay on one line; long file paths wrap inside a tooltip that fits the longest line; keyboard hints stay visible, including on a narrow viewport.
 - `file-progress`: the active file row fills as the diff scrolls, reverses when scrolling up, and resets on the next file, in both folder and diff-order views.
 - `scrolling`: compositor frames keep popovers attached to sticky controls while the page scrolls; the file list and folder tree scroll independently and contain scrolling at both edges. Needs a PR with enough files to overflow the sidebar.
 - `markdown-preview`: a Markdown file's Preview toggle renders its full contents, Mermaid diagrams and highlighted code in both themes. It checks returning to Diff, preserving an unsent comment, comment jumps, find and retry after a failed file request. Picks from the inbox, or set `VERIFY_MARKDOWN_PR=owner/repo/number` to a PR with Mermaid and a supported fenced code example. It adds and removes one local draft without submitting a review.
@@ -123,7 +128,7 @@ Stable handles in this app (prefer these over coordinates):
   - Inline threads are `.comment-fold`. Review → pending comments jumps to a local draft.
   - Indicator mode draws `.comment-indicator`.
 - **Find:**
-  - ⌘F (Ctrl+F) opens `.find-bar`. The input's label is `Find in diff`, the count is `.find-count` (`3 of 42`), and the `Search collapsed files` toggle is `aria-pressed`.
+  - ⌘F (Ctrl+F) opens `.find-bar`. The input's label is `Find in diff`, the count is `.find-count` (`3 of 42`), and collapsed files are always searched. On Guide, the floating bar aligns with the sticky file headers.
   - Matches are CSS Custom Highlights `pr-find` and `pr-find-current`; read them with `CSS.highlights.get(...)`.
 
 ## Evidence

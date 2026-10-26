@@ -10,7 +10,7 @@ import { hideWhitespace, lineHeightFor, type DisplaySettings } from './display';
 import { commentAnchor, DiffSourceContext, fileAnchor, pageVirtualizer, splitPath, useReview } from './pull-page';
 import { ErrorBoundary, Tip } from './ui';
 import { readFile } from '../pull.functions';
-import type { ChangedFile, DraftComment, Reference, CommentThread } from '../types';
+import type { ChangedFile, DraftComment, CommentThread } from '../types';
 
 export function FileCount({ file }: { file: ChangedFile }) {
   return <span className="file-count"><span className="added">+{file.additions}</span>{file.deletions > 0 && <span className="removed">−{file.deletions}</span>}</span>;
@@ -82,7 +82,7 @@ const fileAt = (source: DiffSource, sha: string, path: string) => readFile({ dat
 const MarkdownPreview = lazy(() => import('./markdown-preview'));
 
 // Memoized with path-taking callbacks, so a change elsewhere on the page doesn't re-render every diff.
-export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, onViewed, display, reference, preview, onPreview }: { file: ChangedFile; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; reference: Reference | null; preview: boolean; onPreview: (path: string, preview: boolean) => void }) {
+export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, onViewed, display, selectedLines, onSelectionChange, preview, onPreview }: { file: ChangedFile; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; selectedLines: SelectedLineRange | null; onSelectionChange: (path: string, range: SelectedLineRange | null) => void; preview: boolean; onPreview: (path: string, preview: boolean) => void }) {
   const review = useReview(), { name, directory } = splitPath(file.path);
   // Only open threads on lines still in the diff show on the file, so only those count.
   const commentCount = (review?.threads.filter(thread => thread.path === file.path && thread.line !== null && !thread.resolved).length ?? 0) + (review?.drafts.filter(draft => draft.path === file.path).length ?? 0);
@@ -95,7 +95,7 @@ export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, o
       <label className="file-reviewed"><Checkbox aria-label={`Mark ${file.path} as reviewed`} checked={viewed} onCheckedChange={checked => onViewed(file.path, Boolean(checked))} />Reviewed</label>
     </div>
     {open && <div className="diff-card-body">
-      <div hidden={preview}><ErrorBoundary key={JSON.stringify(display)} fallback={<div className="missing">The diff renderer could not display this patch. Open the PR on GitHub to inspect this file.</div>}><Diff file={file} display={display} reference={reference} /></ErrorBoundary></div>
+      <div hidden={preview}><ErrorBoundary key={JSON.stringify(display)} fallback={<div className="missing">The diff renderer could not display this patch. Open the PR on GitHub to inspect this file.</div>}><Diff file={file} display={display} selectedLines={selectedLines} onSelectionChange={onSelectionChange} /></ErrorBoundary></div>
       {preview && <Suspense fallback={<div className="markdown-preview-status" role="status">Loading preview…</div>}><MarkdownPreview file={file} /></Suspense>}
       {!preview && file.availability !== 'complete' && <div className="diff-caption">{file.availability === 'partial' ? 'Partial patch · GitHub omitted part of this file’s diff' : 'No patch available for this file'}</div>}
     </div>}
@@ -110,7 +110,7 @@ function metadata(item: CommentThread | DraftComment, kind: 'thread' | 'draft'):
   return value;
 }
 
-function Diff({ file, display, reference }: { file: ChangedFile; display: DisplaySettings; reference: Reference | null }) {
+function Diff({ file, display, selectedLines, onSelectionChange }: { file: ChangedFile; display: DisplaySettings; selectedLines: SelectedLineRange | null; onSelectionChange: (path: string, range: SelectedLineRange | null) => void }) {
   const review = useReview();
   const { parsed, onlyWhitespace } = useMemo(() => {
     if (!file.patch) return { parsed: null, onlyWhitespace: false };
@@ -147,6 +147,7 @@ function Diff({ file, display, reference }: { file: ChangedFile; display: Displa
   // A new options object, or a new function inside it, makes the renderer redraw the whole file.
   const options = useMemo(() => ({
     theme, themeType: 'system', unsafeCSS, diffStyle: display.layout, overflow: display.wrap ? 'wrap' : 'scroll', disableLineNumbers: !display.lineNumbers, lineDiffType: display.wordDiff ? 'word' : 'none', disableFileHeader: true, enableLineSelection: true,
+    onLineSelectionEnd: (range: SelectedLineRange | null) => onSelectionChange(file.path, range),
     enableGutterUtility: Boolean(setComposer), hunkSeparators: 'line-info', expansionLineCount,
     // Expanding a hunk fetches both versions of the file once; until then only the patch is shown.
     loadDiffFiles: source ? async () => {
@@ -159,8 +160,7 @@ function Diff({ file, display, reference }: { file: ChangedFile; display: Displa
       const side = range.endSide ?? range.side ?? 'additions', sameSide = (range.side ?? side) === side;
       setComposer({ path: file.path, side, start: sameSide ? Math.min(range.start, range.end) : range.end, end: sameSide ? Math.max(range.start, range.end) : range.end });
     }
-  } as const), [display, setComposer, file.path, source]);
-  const selectedLines = useMemo(() => reference ? { start: reference.startLine, end: reference.endLine, side: reference.side === 'new' ? 'additions' as const : 'deletions' as const } : null, [reference]);
+  } as const), [display, setComposer, file.path, source, onSelectionChange]);
   const size = { font: display.fontSize, line: lineHeightFor(display.fontSize) }, metrics = useMemo(() => ({ ...DEFAULT_VIRTUAL_FILE_METRICS, lineHeight: size.line, diffHeaderHeight: 0, spacing: 0, paddingTop: 0, paddingBottom: 0 }), [size.line]);
   const view = useRef<HTMLDivElement>(null);
   useEffect(() => {

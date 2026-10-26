@@ -1,6 +1,6 @@
 # PR Guide
 
-A personal, localhost-only reading interface inspired by Linear's Guide view. The home page lists open pull requests from the repositories you choose in Settings. Opening one shows its description, conversation and diffs, where you can leave line comments and submit a review. **Analyze** turns the diff into purpose-based sections with before/after explanations, questions, and links to exact changed lines. Viewed files are remembered in this browser per head commit.
+A personal, localhost-only reading interface inspired by Linear's Guide view. The home page lists open pull requests from the repositories you choose in Settings. Opening one shows its description, conversation and diffs, where you can leave line comments and submit a review. **Analyze** turns the diff into purpose-based sections with before/after explanations and links to exact changed lines. Viewed files are remembered in this browser per head commit.
 
 ## Run
 
@@ -20,6 +20,10 @@ Add repositories in **Settings** (or on the empty home page). The home page list
 
 Opening a PR fetches it through `gh` without any model calls. **Analyze** sends its numbered snapshot hunks to Codex, which consumes normal account inference usage; ⇧↵ in search opens a PR's guide and analyzes it if needed. Guides are stored per head commit, so a PR is only analyzed again after new commits (or when you choose **Re-analyze**).
 
+Revisiting a PR in the same tab shows its last loaded content immediately while refreshing it from GitHub. A full page reload clears this in-memory cache; saved analysis still remains in SQLite.
+
+The four PR lists share their loaded rows. Switching tabs shows known matches immediately and fetches that list's remaining results in the background. New results are merged without duplicates using the same sort order. The sort choice is remembered in this browser across tabs, navigation and reloads.
+
 **Reviewing:** hover a line number and click **+** to comment (drag across line numbers for a range). Comments stay pending in the local database until you open **Review** and submit them with Comment, Approve or Request changes. Replies to existing threads post immediately. These are the only GitHub writes, and they happen only when you submit.
 
 ## What it covers
@@ -27,12 +31,13 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 - The PR list keeps four tabs visible. List options contains searchable repository and author filters, draft visibility, and sorting by update date, creation date or repository, with matching sections.
 
 - The shadcn Sidebar keeps app navigation above the files on Overview, Guide and Diff. Repositories can collapse, and the file tree compacts nested folders and truncates only the last name. Drag the sidebar edge to resize it; double-click to reset. Search files with the magnifying glass or `/`; use the adjacent display button to switch between folders and diff order or hide matching files. Press `F` or `⌘B` / `Ctrl+B` to toggle the sidebar.
+- Guide code blocks start expanded unless viewed. Diff and Guide keep separate expansion choices. Viewed state is shared between them and saved in this browser per PR and head commit; it does not sync with GitHub.
 - Chapters organized around intent and behavior, with evidence highlighting and links to each section's files.
 - Display settings, remembered in this browser: unified/split layout, hidden whitespace-only changes, line wrapping, word highlights, line numbers and code size. Diffs render through `@pierre/diffs`.
 - Markdown file headers have an icon button to toggle preview. Preview reads the full file at the PR's head commit, renders Mermaid diagrams and highlights fenced code with the diff viewer's light/dark themes. Deleted files preview the base version. Raw HTML is skipped and images open as links.
 - shadcn base-nova components backed by Base UI (buttons, checkbox, menus, popovers, dialog, switch).
 - Analyzed guides and pending review comments are stored in SQLite at `.data/ryvu.db` (Node's built-in `node:sqlite`, no extra service). Guides from the earlier `.data/cache` files are imported when the server first opens the database.
-- Settings (repositories and home page preferences) are stored in `.data/settings.json`; the open-PR list is cached in memory for a minute.
+- Settings (repositories, page size and default visibility) are stored in `.data/settings.json`. PR list responses are cached for 30 seconds, and loaded browser rows remain available until a full page reload.
 - PR descriptions and comments render a safe Markdown subset (no raw HTML).
 - Cancel an active generation; a newer request supersedes an earlier one for this browser session.
 - Local progress and private, SHA/model/prompt-version-specific guide cache in `.data/cache`.
@@ -41,7 +46,7 @@ Opening a PR fetches it through `gh` without any model calls. **Analyze** sends 
 
 ## Boundaries
 
-The app reads metadata, description and file patches, checking base/head SHAs before and after loading. Reading a PR fetches metadata, description, file patches, review threads and conversation comments. Expanding a hunk or opening a Markdown preview fetches full file contents at the snapshot's commit. It does not merge, edit issues or GitHub settings, publish or deploy. Marking a chapter read affects local progress only. Evidence validation establishes that referenced lines exist, not that every model explanation is correct. Independently review the code and questions.
+The app reads metadata, description and file patches, checking base/head SHAs before and after loading. Reading a PR fetches metadata, description, file patches, review threads and conversation comments. Expanding a hunk or opening a Markdown preview fetches full file contents at the snapshot's commit. It does not merge, edit issues or GitHub settings, publish or deploy. Marking a chapter read affects local progress only. Evidence validation establishes that referenced lines exist, not that every model explanation is correct. Independently review the code and explanations.
 
 Limits: 200 files / 120,000 patch characters per guide. GitHub omissions and changed-file limits are surfaced. Generation has an eight-minute timeout, output limits and subprocess-group cancellation. Temporary generation files are removed. Codex runs ephemerally in a temporary directory with read-only sandbox, no approval prompts, ignored user config/rules, disabled hooks, shell, browser, apps, agents and memory features. Its authentication still comes from the existing Codex account. Only supplied snapshot data is intended to be analyzed.
 

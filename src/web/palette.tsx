@@ -7,7 +7,7 @@ import { pullIndex, pullKey, remember, type KnownPull } from './browser-state';
 import { fuzzy, segments } from './fuzzy';
 import { homeLink, pullLink, settingsLink } from './links';
 import { commandKey } from './shell';
-import { Highlighted, Kbd, PullIcon, RepoSwatch, repoColor } from './ui';
+import { Highlighted, Kbd, PullIcon } from './ui';
 import type { IndexedPull, Resolution, Settings } from '../types';
 
 type Target = { repo: string; number: number };
@@ -115,14 +115,14 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
               <span className="palette-icon"><PullIcon draft={item.pull.isDraft} state={item.pull.state} size={16} /></span>
               <span className="palette-text">
                 <span className="palette-title"><Highlighted runs={segments(item.pull.title, item.title)} /></span>
-                <span className="palette-meta"><RepoSwatch color={repoColor(repos, item.pull.repo)} size={7} />{item.pull.repo} #{item.pull.number} · {item.pull.author}{item.pull.state && item.pull.state !== 'open' ? ` · ${item.pull.state}` : item.pull.isDraft ? ' · draft' : ''}{item.pull.reviewRequested ? ' · review requested' : ''}</span>
+                <span className="palette-meta">{item.pull.repo} #{item.pull.number} · {item.pull.author}{item.pull.state && item.pull.state !== 'open' ? ` · ${item.pull.state}` : item.pull.isDraft ? ' · draft' : ''}{item.pull.reviewRequested ? ' · review requested' : ''}</span>
               </span>
               <span className="palette-hint">Open<Kbd><CornerDownLeft /></Kbd></span>
             </> : item.kind === 'goto' ? <>
               <span className="palette-icon"><PullIcon size={16} /></span>
               <span className="palette-text">
                 <span className="palette-title">Go to {item.target.repo} #{item.target.number}</span>
-                <span className="palette-meta"><RepoSwatch color={repoColor(repos, item.target.repo)} size={7} />{resolution?.error ? 'Title unavailable' : <><LoaderCircle size={11} className="spinner" />Looking up the title…</>}</span>
+                <span className="palette-meta">{resolution?.error ? 'Title unavailable' : <><LoaderCircle size={11} className="spinner" />Looking up the title…</>}</span>
               </span>
               <span className="palette-hint">Open<Kbd><CornerDownLeft /></Kbd></span>
             </> : <>

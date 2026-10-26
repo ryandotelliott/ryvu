@@ -8,6 +8,7 @@ The home page lists open pull requests across the user's repositories, with four
 - `inbox-options` searches repository and author choices, toggles drafts, and chooses the sort.
 - `inbox-groups` groups the full paginated list by the chosen date or repository.
 - `inbox-tabs` switches between All open, Review requested, Authored by me and Guide ready.
+- `inbox-cache` shows matching loaded rows while fetching a tab's remaining results, merges without duplicates, and shares the selected sort across tabs and navigation.
 - `palette-search` finds a PR by words from its title.
 - `inbox-open` opens a row on the PR's Overview page.
 

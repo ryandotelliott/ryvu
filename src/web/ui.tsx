@@ -11,13 +11,6 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { JobView } from '../types';
 
-export const repoColors = ['#6767d0', '#d08a3e', '#3f9a78', '#c06aae', '#4f8fc0', '#b8615a', '#8a7a5c', '#4f9aa8'];
-export function repoColor(repos: string[], repo: string) {
-  const index = repos.findIndex(name => name.toLowerCase() === repo.toLowerCase());
-  return index === -1 ? '#ababb4' : repoColors[index % repoColors.length];
-}
-export function RepoSwatch({ color, size = 8 }: { color: string; size?: number }) { return <span className="repo-swatch" style={{ background: color, width: size, height: size }} aria-hidden />; }
-
 const avatarColors = ['#5b7fd6', '#c06aae', '#d08a3e', '#3f9a78', '#8a7a5c', '#7d8ca3', '#b8615a', '#4f9aa8'];
 export function Avatar({ login, size = 20 }: { login: string; size?: number }) {
   const hash = [...login].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0, 7);
@@ -54,7 +47,7 @@ function TooltipText({ children }: { children: ReactNode }) {
     const fit = () => {
       element.style.width = '';
       const range = document.createRange(); range.selectNodeContents(element);
-      const scale = element.getBoundingClientRect().width / element.offsetWidth;
+      const scale = element.getBoundingClientRect().width / parseFloat(getComputedStyle(element).width);
       const width = Math.max(0, ...Array.from(range.getClientRects(), rect => rect.width / scale));
       if (Number.isFinite(width) && width > 0) element.style.width = `${Math.ceil(width)}px`;
     };

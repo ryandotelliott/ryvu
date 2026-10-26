@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowDown, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, CircleX, Clock, ExternalLink, Eye, EyeOff, FileCode2, GitBranch, ListChecks, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import type { SelectedLineRange } from '@pierre/diffs';
+import { Check, ChevronDown, ChevronRight, CircleX, Clock, Eye, EyeOff, FileCode2, GitBranch, ListChecks, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
-import { SidebarGroup, SidebarGroupAction, SidebarGroupLabel, SidebarInset, useSidebar } from '@/components/ui/sidebar';
+import { SidebarGroup, SidebarGroupAction, SidebarGroupLabel, useSidebar } from '@/components/ui/sidebar';
 import { addDraft, deleteDraft, replyToThread, submitReview as postReview, updateDraft } from '../pull.functions';
 import { agoLong, progressKey, readStored, useNow, writeStored } from './browser-state';
 import { Activity, ReviewMenu, Toast, type ComposerTarget, type ReviewApi } from './comments';
@@ -17,19 +18,19 @@ import { FindBar, findMatches, scrollToMatch, useFindHighlights } from './find';
 import { clampFontSize, fontSizes, useDisplay, type DisplaySettings } from './display';
 import { contains } from './fuzzy';
 import { matchesPattern, useHiddenFiles } from './file-filters';
-import { pullLink, type PullViewName } from './links';
-import { Avatar, CheckRow, focusOnKeyboardOpen, Kbd, PullIcon, RadioRows, RepoSwatch, Tip } from './ui';
-import { AppSidebar, ShowSidebar } from './shell';
-import { StackMenu } from './stack';
+import { pullLink, pullViews, type PullViewName } from './links';
+import { Avatar, CheckRow, focusOnKeyboardOpen, Kbd, PullIcon, RadioRows, Tip } from './ui';
+import type { AppSidebar } from './shell';
+import { ReviewLayout } from './review-layout';
 import { inline, Markdown } from './markdown';
 import { fileAnchor, ReviewContext, scrollPageBy, splitPath } from './pull-page';
-import type { ChangedFile, Chapter, PullDetail, Reference, ReviewEvent, Snapshot } from '../types';
+import type { ChangedFile, Chapter, PullDetail, ReviewEvent, Snapshot } from '../types';
 
 // Heights of the sticky top bar and the diff toolbar, so scrolled-to content lands below them.
 const topbar = 48, toolbar = 44, initiallyOpen = 12;
 type DiffView = Exclude<PullViewName, 'overview'>;
-const views: [PullViewName, string][] = [['overview', 'Overview'], ['guide', 'Guide'], ['diff', 'Diff']];
-const orderKey = 'pr-guide:file-order', findCollapsedKey = 'pr-guide:find-collapsed';
+type LineSelection = { path: string; range: SelectedLineRange };
+const orderKey = 'pr-guide:file-order';
 // Jumps instantly, then re-aligns while the diff virtualizer swaps estimated heights for measured ones above the target.
 function scrollToElement(target: string | (() => Element | null), offset: number, center = false) {
   let frames = 0, settled = 0;
@@ -63,7 +64,7 @@ function seekComment(anchor: string, fileId: string, offset: number) {
   step();
 }
 
-export function PullView({ detail, onDetail, view, navigation, status, analyzing, onAnalyze, color }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; navigation: ComponentProps<typeof AppSidebar>; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void; color: string }) {
+export function PullView({ detail, onDetail, view, navigation, status, analyzing, onAnalyze }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; navigation: ComponentProps<typeof AppSidebar>; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void }) {
   const { snapshot, guide: review, conversation, drafts } = detail, guide = review?.guide ?? null;
   const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`, number = snapshot.identity.number, pullKey = `${repo.toLowerCase()}#${number}`;
   const [display, setDisplay, resetDisplay] = useDisplay(), navigate = useNavigate();
@@ -81,18 +82,18 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   const [viewed, setViewed] = useState<string[]>(() => { const stored = readStored<unknown>(viewedKey, []); return Array.isArray(stored) ? stored.filter(path => snapshot.files.some(file => file.path === path)) : []; });
   const [open, setOpen] = useState<Record<DiffView, string[]>>(() => {
     const unread = (paths: string[]) => paths.filter(path => !viewed.includes(path));
-    const firstChapter = chapters.find(chapter => unread(chapter.files).length);
-    return { diff: unread(shown.map(file => file.path)).slice(0, initiallyOpen), guide: firstChapter ? unread(firstChapter.files).slice(0, 1) : [] };
+    return { diff: unread(shown.map(file => file.path)).slice(0, initiallyOpen), guide: unread([...new Set(chapters.flatMap(chapter => chapter.files))]) };
   });
   const [filter, setFilter] = useState(''), [filterOpen, setFilterOpen] = useState(false), [current, setCurrent] = useState(0);
+  const [find, setFind] = useState({ open: false, query: '', index: 0, focus: 0 });
   const [previewed, setPreviewed] = useState<string[]>([]);
   const setFilePreview = useCallback((path: string, preview: boolean) => setPreviewed(previous => preview ? [...new Set([...previous, path])] : previous.filter(value => value !== path)), []);
-  const [selected, setSelected] = useState<Reference | null>(null), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
+  const [selected, setSelected] = useState<Record<DiffView, LineSelection | null>>({ diff: null, guide: null }), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
   // A jump focuses one comment. Focus belongs to the comment mode it was set in, so switching modes never opens a popover on its own.
   const [focused, setFocused] = useState<{ anchor: string; mode: string } | null>(null);
   const focus = focused?.mode === display.comments ? focused.anchor : null;
   const setFocus = useCallback((anchor: string | null) => setFocused(anchor ? { anchor, mode: display.comments } : null), [display.comments]);
-  const filterInput = useRef<HTMLInputElement>(null), filterButton = useRef<HTMLButtonElement>(null), limitationsRef = useRef<HTMLDetailsElement>(null), fileSidebar = useRef<HTMLDivElement>(null);
+  const filterInput = useRef<HTMLInputElement>(null), filterButton = useRef<HTMLButtonElement>(null), fileSidebar = useRef<HTMLDivElement>(null);
   function searchFiles() { if (isMobile) setOpenMobile(true); else setSidebarOpen(true); setFilterOpen(true); requestAnimationFrame(() => filterInput.current?.focus()); }
   function closeFileSearch() { setFilter(''); setFilterOpen(false); filterButton.current?.focus(); }
   const done = useMemo(() => chapters.filter(chapter => chapter.files.every(path => viewed.includes(path))).map(chapter => chapter.id), [chapters, viewed]);
@@ -108,7 +109,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
       if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], [role="dialog"]')) return;
       const index = ['1', '2', '3'].indexOf(event.key);
-      if (index !== -1) { event.preventDefault(); void navigate(pullLink(repo, number, views[index][0])); return; }
+      if (index !== -1) { event.preventDefault(); void navigate(pullLink(repo, number, pullViews[index][0])); return; }
       if (event.key === '/') { event.preventDefault(); searchFiles(); return; }
       if ((event.key !== 'j' && event.key !== 'k') || !items.length) return;
       let at = -1;
@@ -131,26 +132,26 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(frame); };
   }, [items.join('|'), offset, view, sidebarVisible]);
   const files = new Map(snapshot.files.map(file => [file.path, file]));
+  const diffView: DiffView = view === 'guide' ? 'guide' : 'diff';
+  const selectLines = useCallback((path: string, range: SelectedLineRange | null) => setSelected(previous => ({ ...previous, [diffView]: range ? { path, range } : null })), [diffView]);
   const setFileViewed = useCallback((paths: string[], value: boolean) => {
     setViewed(previous => value ? [...new Set([...previous, ...paths])] : previous.filter(path => !paths.includes(path)));
-    if (value) setOpen(previous => ({ diff: previous.diff.filter(path => !paths.includes(path)), guide: previous.guide.filter(path => !paths.includes(path)) }));
-  }, []);
+    if (value) setOpen(previous => ({ ...previous, [diffView]: previous[diffView].filter(path => !paths.includes(path)) }));
+  }, [diffView]);
   const markViewed = useCallback((path: string, value: boolean) => setFileViewed([path], value), [setFileViewed]);
-  // The overview has no diffs; picking a file there opens it in Diff.
-  const diffView: DiffView = view === 'guide' ? 'guide' : 'diff';
   const toggle = useCallback((path: string) => setOpen(previous => ({ ...previous, [diffView]: previous[diffView].includes(path) ? previous[diffView].filter(value => value !== path) : [...previous[diffView], path] })), [diffView]);
+  // The overview has no diffs; picking a file there opens it in Diff.
   function pickFile(path: string) {
     const targetView = view === 'guide' && chapters.some(chapter => chapter.files.includes(path)) ? 'guide' : 'diff';
     setOpen(previous => ({ ...previous, [targetView]: [...new Set([...previous[targetView], path])] }));
     if (view !== targetView) void navigate(pullLink(repo, number, targetView));
-    if (targetView === 'guide') { setFilePreview(path, false); setSelected(guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path) ?? null); }
+    if (targetView === 'guide') {
+      setFilePreview(path, false);
+      const reference = guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path);
+      setSelected(previous => ({ ...previous, guide: reference ? { path, range: { start: reference.startLine, end: reference.endLine, side: reference.side === 'new' ? 'additions' : 'deletions' } } : null }));
+    }
     if (isMobile) setOpenMobile(false);
     requestAnimationFrame(() => scrollToElement(fileAnchor(path), targetView === 'diff' ? topbar + toolbar + 16 : topbar + 16, targetView === 'guide'));
-  }
-  function goToChapter(chapter: Chapter, expand = true) {
-    const path = chapter.files.find(value => !viewed.includes(value));
-    if (expand && path) setOpen(previous => ({ ...previous, guide: [...new Set([...previous.guide, path])] }));
-    scrollToElement(chapter.id, offset);
   }
   const pull = { repo, number };
   const reviewApi = useMemo<ReviewApi>(() => ({
@@ -176,7 +177,6 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     if (view !== 'diff') void navigate(pullLink(repo, number, 'diff'));
     requestAnimationFrame(() => seekComment(`draft-${first.id}`, fileAnchor(first.path), topbar + toolbar + 16));
   };
-  const limitations = [...snapshot.warnings, ...(guide?.limitations ?? []), ...(guide?.omissions.map(o => `${o.path}: ${o.reason}`) ?? [])];
   const changedFiles = shown.filter(file => contains(filter, file.path));
   const additions = shown.reduce((sum, file) => sum + file.additions, 0), deletions = shown.reduce((sum, file) => sum + file.deletions, 0);
   // Changed lines in visible files you haven't marked reviewed.
@@ -184,15 +184,11 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   const currentPath = view === 'diff' ? shown[current]?.path ?? null : view === 'guide' ? chapters[current]?.files[0] ?? null : null;
   // Expand and collapse act on the files of the page you're on, skipping hidden ones.
   const pageFiles = view === 'guide' ? chapters.flatMap(chapter => chapter.files) : shown.map(file => file.path);
-  // ⌘F searches the diffs on this page. Collapsed files are searched only when that toggle is on; a match in one opens it.
-  const [find, setFind] = useState({ open: false, query: '', index: 0, focus: 0 });
-  const [includeCollapsed, setIncludeCollapsed] = useState(() => readStored<unknown>(findCollapsedKey, false) === true);
-  useEffect(() => { writeStored(findCollapsedKey, includeCollapsed); }, [includeCollapsed]);
   const matches = useMemo(() => {
     if (!find.open || !find.query) return [];
-    const candidates = pageFiles.filter(path => includeCollapsed || open[diffView].includes(path)).map(path => files.get(path)!).filter(Boolean);
+    const candidates = pageFiles.map(path => files.get(path)!).filter(Boolean);
     return findMatches(candidates, find.query);
-  }, [find.open, find.query, pageFiles.join('\n'), includeCollapsed, open[diffView].join('\n')]);
+  }, [find.open, find.query, pageFiles.join('\n')]);
   const findIndex = matches.length ? Math.min(find.index, matches.length - 1) : 0;
   useFindHighlights(find.open ? matches : [], findIndex);
   function goToMatch(index: number) {
@@ -213,15 +209,24 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     function onKey(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || view === 'overview') return;
       const key = event.key.toLowerCase();
-      if (key === 'f') { event.preventDefault(); setFind(previous => ({ ...previous, open: true, focus: previous.focus + 1 })); }
+      if (key === 'f') {
+        event.preventDefault();
+        const field = document.activeElement;
+        const selection = (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== null && field.selectionEnd !== null
+          ? field.value.slice(field.selectionStart, field.selectionEnd)
+          : window.getSelection()?.toString() ?? '';
+        setFind(previous => ({ ...previous, open: true, query: selection || previous.query, index: selection ? 0 : previous.index, focus: previous.focus + 1 }));
+      }
       else if (key === 'g' && find.open) { event.preventDefault(); stepMatch(event.shiftKey ? -1 : 1); }
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   });
   const displayMenu = <DisplayMenu positionMethod={view === 'diff' ? 'fixed' : undefined} display={display} onChange={setDisplay} onReset={resetDisplay} onExpand={() => setOpen(previous => ({ ...previous, [diffView]: pageFiles }))} onCollapse={() => setOpen(previous => ({ ...previous, [diffView]: [] }))} />;
-  const heading = <PullHeading snapshot={snapshot} color={color} />;
+  const heading = <PullHeading snapshot={snapshot} />;
   return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={reviewApi}>
-    <AppSidebar {...navigation}>
+    <ReviewLayout navigation={navigation} repo={repo} number={number} title={snapshot.title} stack={detail.stack} view={view} analyzing={analyzing}
+      sidebarFooter={filteredCount > 0 && <Tip content={hidden.enabled ? 'Show them' : 'Hide them'} delay="long"><Button variant="ghost" size="xs" className="min-w-0 flex-1 justify-start text-muted-foreground" onClick={() => hidden.setEnabled(!hidden.enabled)}>{hidden.enabled ? <EyeOff /> : <Eye />}<span className="truncate">{filteredCount} filtered {filteredCount === 1 ? 'file' : 'files'} {hidden.enabled ? 'hidden' : 'visible'}</span></Button></Tip>}
+      sidebar={
       <SidebarGroup ref={fileSidebar} className="file-tree min-h-0 flex-1" aria-label="Files">
         <SidebarGroupLabel>Files <span className="ml-2 tabular-nums">{shown.length}</span></SidebarGroupLabel>
         <Tip content="Search files" hotkey="/" side="bottom"><SidebarGroupAction ref={filterButton} className="right-10" aria-label="Search files" aria-expanded={filterOpen} onClick={() => filterOpen ? closeFileSearch() : searchFiles()}><Search /></SidebarGroupAction></Tip>
@@ -230,19 +235,10 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
         {order === 'tree' ? <ChangedFileTree key={patterns.join('\n')} files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />
           : <ChangedFileList files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />}
         {!changedFiles.length && <p className="outline-empty">{filter ? `No files match “${filter}”.` : 'Every file is hidden.'}</p>}
-        {filteredCount > 0 && <Tip content={hidden.enabled ? 'Show them' : 'Hide them'} delay="long"><button type="button" className="hidden-note" onClick={() => hidden.setEnabled(!hidden.enabled)}>{hidden.enabled ? <EyeOff size={13} /> : <Eye size={13} />}{filteredCount} filtered {filteredCount === 1 ? 'file' : 'files'} {hidden.enabled ? 'hidden' : 'visible'}</button></Tip>}
       </SidebarGroup>
-    </AppSidebar>
-    <SidebarInset className={`pr-page view-${view} min-w-0`} data-sidebar-open={sidebarVisible && !isMobile}>
-    <header className="pr-topbar">
-      <ShowSidebar />
-      {detail.stack ? <StackMenu repo={repo} number={number} title={snapshot.title} stack={detail.stack} view={view} />
-        : <Tip content={`${repo} #${number}: ${snapshot.title}`} delay="long" side="bottom"><span className="topbar-title"><span className="topbar-number">#{number}</span><span>{snapshot.title}</span></span></Tip>}
-      <nav className="view-tabs" aria-label="View">{views.map(([name, label], i) => <Tip key={name} content={label} hotkey={String(i + 1)} delay="long" side="bottom"><Link {...pullLink(repo, number, name)} className={view === name ? 'is-active' : ''} aria-current={view === name ? 'page' : undefined}>{label}{name === 'guide' && analyzing && <LoaderCircle size={12} className="spinner" />}</Link></Tip>)}</nav>
-      <div className="topbar-actions">
-        <ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />
-      </div>
-    </header>
+      }
+      actions={<ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />}
+    >
     {view === 'overview' ? <OverviewView detail={detail} heading={heading} onFile={pickFile} />
       : view === 'guide' ? <div className="guide-page">
         <div className="guide-head">
@@ -252,17 +248,14 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
             <span>{review.model} · {snapshot.headSHA.slice(0, 7)}</span>
             <Tip content="Run analysis again for this commit" delay="long"><Button variant="ghost" size="xs" disabled={analyzing} onClick={() => onAnalyze(true)}><RotateCw size={12} />Re-analyze</Button></Tip>
             {staleFilters && <Tip content="Your hidden files changed since this guide was made. Re-analyze to match them." delay="short"><span className="guide-stale"><EyeOff size={12} />Made with different hidden files</span></Tip>}
-            {limitations.length > 0 && <button type="button" className="limitations-link" onClick={() => { if (limitationsRef.current) { limitationsRef.current.open = true; scrollToElement('limitations', offset, true); } }}><CircleAlert size={13} />Scope and limitations · {limitations.length}</button>}
             <span className="guide-meta-end">{displayMenu}</span>
           </div>}
         </div>
         {status && <div className="review-status">{status}</div>}
         {guide ? <>
-          <nav className="section-rail" aria-label="Sections">{chapters.map((chapter, index) => <Tip key={chapter.id} content={`${index + 1}. ${chapter.title}`} delay="instant" side="right"><button type="button" className={`${index === current ? 'is-current' : ''} ${done.includes(chapter.id) ? 'is-done' : ''}`} onClick={() => goToChapter(chapter, false)} aria-label={`Section ${index + 1}: ${chapter.title}`} aria-current={index === current ? 'location' : undefined} /></Tip>)}</nav>
-          <div className="chapters">{chapters.map((chapter, index) => <ChapterSection key={chapter.id} chapter={chapter} index={index} total={chapters.length} next={chapters[index + 1]} done={done.includes(chapter.id)} files={chapter.files.map(path => files.get(path)!)} onMark={checked => setFileViewed(chapter.files, checked)} onNext={goToChapter} onFile={pickFile}
-            diffs={chapter.files.map(path => <DiffCard key={path} file={files.get(path)!} open={open.guide.includes(path)} viewed={viewed.includes(path)} onToggle={toggle} onViewed={markViewed} display={display} reference={selected?.path === path ? selected : null} preview={previewed.includes(path)} onPreview={setFilePreview} />)} />)}</div>
-          <GuideEnd done={done.length} total={chapters.length} url={snapshot.identity.url} />
-          {limitations.length > 0 && <details className="limitations" id="limitations" ref={limitationsRef}><summary><ChevronRight size={12} className="chevron" />Scope and limitations · {limitations.length}</summary>{limitations.map((text, i) => <p key={i}>{text}</p>)}</details>}
+          <nav className="section-rail" aria-label="Sections">{chapters.map((chapter, index) => <Tip key={chapter.id} content={`${index + 1}. ${chapter.title}`} delay="instant" side="right"><button type="button" className={`${index === current ? 'is-current' : ''} ${done.includes(chapter.id) ? 'is-done' : ''}`} onClick={() => scrollToElement(chapter.id, offset)} aria-label={`Section ${index + 1}: ${chapter.title}`} aria-current={index === current ? 'location' : undefined} /></Tip>)}</nav>
+          <div className="chapters">{chapters.map((chapter, index) => <ChapterSection key={chapter.id} chapter={chapter} index={index} total={chapters.length} done={done.includes(chapter.id)} files={chapter.files.map(path => files.get(path)!)} onMark={checked => setFileViewed(chapter.files, checked)} onFile={pickFile}
+            diffs={chapter.files.map(path => <DiffCard key={path} file={files.get(path)!} open={open.guide.includes(path)} viewed={viewed.includes(path)} onToggle={toggle} onViewed={markViewed} display={display} selectedLines={selected.guide?.path === path ? selected.guide.range : null} onSelectionChange={selectLines} preview={previewed.includes(path)} onPreview={setFilePreview} />)} />)}</div>
         </> : <AnalyzePrompt analyzing={analyzing} prior={detail.prior} onAnalyze={() => onAnalyze(false)} />}
       </div>
       : <div className="diff-page">
@@ -272,23 +265,23 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
           <span className="toolbar-actions"><span className="toolbar-progress">{linesLeft.toLocaleString()} {linesLeft === 1 ? 'line' : 'lines'} left</span>{displayMenu}</span>
         </div>
         <div className="diff-body">
-          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} reference={null} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
+          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} selectedLines={selected.diff?.path === file.path ? selected.diff.range : null} onSelectionChange={selectLines} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
         </div>
       </div>}
     {find.open && view !== 'overview' && <FindBar query={find.query} onQuery={query => setFind(previous => ({ ...previous, query, index: 0 }))} count={matches.length} current={findIndex} onStep={stepMatch}
-      includeCollapsed={includeCollapsed} onIncludeCollapsed={setIncludeCollapsed} onClose={() => setFind(previous => ({ ...previous, open: false }))} focusKey={find.focus} />}
+      onClose={() => setFind(previous => ({ ...previous, open: false }))} focusKey={find.focus} />}
     {toast && <Toast message={toast} onDone={() => setToast('')} />}
-  </SidebarInset></ReviewContext.Provider></DiffProvider>;
+    </ReviewLayout></ReviewContext.Provider></DiffProvider>;
 }
 
-function PullHeading({ snapshot, color }: { snapshot: Snapshot; color: string }) {
+function PullHeading({ snapshot }: { snapshot: Snapshot }) {
   const { owner, repo, number } = snapshot.identity;
   return <header className="pr-heading">
     <h1>{snapshot.title}</h1>
     <div className="review-meta">
       {snapshot.state && snapshot.state !== 'open' ? <span className={`state-chip ${snapshot.state}`}>{snapshot.state === 'merged' ? 'Merged' : 'Closed'}</span> : snapshot.draft ? <span className="state-chip draft">Draft</span> : null}
       <Avatar login={snapshot.author} size={18} /><span className="author">{snapshot.author}</span>
-      <span className="meta-separator">·</span><span className="meta-repo"><RepoSwatch color={color} size={7} />{owner}/{repo} #{number}</span>
+      <span className="meta-separator">·</span><span className="meta-repo">{owner}/{repo} #{number}</span>
       {snapshot.baseRef && snapshot.headRef && <><span className="meta-separator">·</span><span className="branches"><code>{snapshot.baseRef}</code>←<code>{snapshot.headRef}</code></span></>}
     </div>
   </header>;
@@ -339,18 +332,10 @@ function AnalyzePrompt({ analyzing, prior, onAnalyze }: { analyzing: boolean; pr
   const now = useNow();
   return <div className="analyze-empty">
     <h2>Get a guided walkthrough</h2>
-    <p>Analysis groups this pull request’s changes into sections by intent, explains the before and after, and suggests questions worth checking. It sends the diff to Codex and usually takes a few minutes. The result is saved for this commit, so it only runs again when new commits are pushed.</p>
+    <p>Analysis groups this pull request’s changes into sections by intent and explains the before and after. It sends the diff to Codex and usually takes a few minutes. The result is saved for this commit, so it only runs again when new commits are pushed.</p>
     {prior && <p className="analyze-prior">Last analyzed at <code>{prior.headSHA.slice(0, 7)}</code> {agoLong(prior.generatedAt, now)}. New commits have been pushed since.</p>}
     <Button onClick={onAnalyze} disabled={analyzing}>{analyzing && <LoaderCircle className="spinner" />}{analyzing ? 'Analyzing…' : 'Analyze'}</Button>
   </div>;
-}
-
-function GuideEnd({ done, total, url }: { done: number; total: number; url: string }) {
-  const allDone = done === total;
-  return <footer className="guide-end">
-    <div className={`guide-end-status ${allDone ? 'is-done' : ''}`}>{allDone ? <CircleCheck size={18} /> : <span className="guide-end-count">{done}/{total}</span>}<div><p>{allDone ? `All ${total} sections reviewed` : `${total - done} of ${total} sections left to review`}</p><small>When you’re ready, use Review to comment, approve or request changes.</small></div></div>
-    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={url} target="_blank" rel="noreferrer">Open on GitHub<ExternalLink /></a>
-  </footer>;
 }
 
 function DisplayMenu({ display, onChange, onReset, onExpand, onCollapse, positionMethod }: { display: DisplaySettings; onChange: (patch: Partial<DisplaySettings>) => void; onReset: () => void; onExpand: () => void; onCollapse: () => void } & Pick<ComponentProps<typeof PopoverContent>, 'positionMethod'>) {
@@ -392,16 +377,14 @@ function FontSizeField({ value, onChange }: { value: number; onChange: (value: n
   </InputGroup>;
 }
 
-function ChapterSection({ chapter, index, total, next, done, files, onMark, onNext, onFile, diffs }: { chapter: Chapter; index: number; total: number; next?: Chapter; done: boolean; files: ChangedFile[]; onMark: (checked: boolean) => void; onNext: (chapter: Chapter) => void; onFile: (path: string) => void; diffs: ReactNode }) {
+function ChapterSection({ chapter, index, total, done, files, onMark, onFile, diffs }: { chapter: Chapter; index: number; total: number; done: boolean; files: ChangedFile[]; onMark: (checked: boolean) => void; onFile: (path: string) => void; diffs: ReactNode }) {
   const pad = (value: number) => String(value).padStart(2, '0');
   return <section className={`chapter-section ${done ? 'is-done' : ''}`} id={chapter.id}>
     <div className="explanation" tabIndex={0} aria-label={`${chapter.title} summary`}>
       <h2>{chapter.title}</h2>
       <div className="chapter-progress"><span className="chapter-count">{pad(index + 1)} / {pad(total)}</span><label className="chapter-reviewed"><Checkbox checked={done} onCheckedChange={checked => onMark(Boolean(checked))} aria-label={`Mark ${chapter.title} reviewed`} />Reviewed</label></div>
       <div className="chapter-copy"><p>{inline(chapter.purpose)}</p><p>{inline(chapter.behavior)}</p></div>
-      {chapter.questions.length > 0 && <details className="review-questions"><summary><ChevronRight size={12} className="chevron" />Questions to consider<span className="count">{chapter.questions.length}</span></summary><ul>{chapter.questions.map((q, i) => <li key={i}>{inline(q)}</li>)}</ul></details>}
       <div className="chapter-files">{files.map(file => { const { name, directory } = splitPath(file.path); return <Tip key={file.path} content={file.path} delay="long"><button type="button" className="chapter-file" onClick={() => onFile(file.path)}><FileCode2 size={12} /><span className="filename">{name}</span><span className="directory">{directory}</span><FileCount file={file} /></button></Tip>; })}</div>
-      {done && next && <Button variant="ghost" size="sm" className="self-start" onClick={() => onNext(next)}>Next section<ArrowDown size={12} /></Button>}
     </div>
     <div className="diff-panel" aria-label={`${chapter.title} diffs`}>{diffs}</div>
   </section>;
