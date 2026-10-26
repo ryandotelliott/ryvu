@@ -162,7 +162,6 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
   useEffect(() => { const path = shown.find(file => `#${fileAnchor(file.path)}` === window.location.hash)?.path; if (path) pickFile(path); }, []);
   // On a range, the PRs in it that changed each file, bottom first.
   const touched = useMemo(() => new Map<string, RangePull[]>(range ? snapshot.files.map(file => [file.path, range.filter(pull => pull.files.includes(file.path) || (file.previousPath !== null && pull.files.includes(file.previousPath))).reverse()]) : []), [range, snapshot.files]);
-  const tags = useMemo(() => range ? new Map([...touched].map(([path, pulls]) => [path, pulls.length > 3 ? `${pulls.length} PRs` : pulls.map(pull => `#${pull.number}`).join(' ')])) : undefined, [touched]);
   const pull = { repo, number };
   const reviewApi = useMemo<ReviewApi>(() => ({
     viewer: detail.viewer, author: snapshot.author, threads: conversation.threads, drafts, composer, setComposer,
@@ -247,8 +246,8 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
         <Tip content="Search files" hotkey="/" side="bottom"><SidebarGroupAction ref={filterButton} className="right-10" aria-label="Search files" aria-expanded={filterOpen} onClick={() => filterOpen ? closeFileSearch() : searchFiles()}><Search /></SidebarGroupAction></Tip>
         <FileDisplayMenu order={order} onOrder={setOrder} hidden={hidden} files={snapshot.files} trigger={<SidebarGroupAction aria-label="File list display" />} />
         {filterOpen && <div className="pb-2"><InputGroup className="bg-card"><InputGroupAddon><Search /></InputGroupAddon><InputGroupInput ref={filterInput} value={filter} onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); closeFileSearch(); } }} placeholder="Filter files" aria-label="Filter files" spellCheck={false} /><InputGroupAddon align="inline-end"><Kbd>/</Kbd></InputGroupAddon></InputGroup></div>}
-        {order === 'tree' ? <ChangedFileTree key={patterns.join('\n')} files={shown} viewed={viewed} current={currentPath} search={filter} tags={tags} onPick={pickFile} />
-          : <ChangedFileList files={shown} viewed={viewed} current={currentPath} search={filter} tags={tags} onPick={pickFile} />}
+        {order === 'tree' ? <ChangedFileTree key={patterns.join('\n')} files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />
+          : <ChangedFileList files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />}
         {!changedFiles.length && <p className="outline-empty">{filter ? `No files match “${filter}”.` : 'Every file is hidden.'}</p>}
       </SidebarGroup>
       }

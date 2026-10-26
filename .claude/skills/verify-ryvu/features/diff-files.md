@@ -12,6 +12,7 @@ The Diff page shows every changed file as a card with syntax-highlighted code. T
 - `sidebar-repositories` collapses the repository links to give files more room.
 - `sidebar-progress` fills the active file row as you scroll through its diff, in both folder and diff-order views.
 - `sidebar-filter` narrows the list by path text.
+- `sidebar-counts` shows per-file additions and deletions in both layouts; multi-PR ranges use the combined diff's counts (`journeys/stack-range.mjs`).
 - `sidebar-jump` scrolls to a file, landing its card at 108px, and marks it current.
 - `sticky-header` pins the current file's header 16px below the toolbar, with no code showing around it even mid-scroll.
 - `reviewed` ticks a file reviewed and updates `N/M reviewed`.

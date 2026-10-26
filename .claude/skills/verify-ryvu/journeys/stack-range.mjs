@@ -79,9 +79,28 @@ export default async function (ctx) {
   await page.getByRole('button', { name: 'File list display' }).click();
   await page.getByRole('button', { name: 'Diff order', exact: true }).click();
   await page.keyboard.press('Escape');
-  const tags = await page.locator('.list-file').evaluateAll(rows => rows.map(row => row.querySelector('.file-tags')?.textContent ?? null));
-  ctx.check(tags.length === files.length && tags.every(tag => tag !== null) && tags.some(tag => tag.startsWith('#')), `the file list names PRs in place of line counts (${tags.slice(0, 4).join(' | ')} …)`);
-  await ctx.shot('file-list-tags');
+  const counts = await page.locator('.list-file').evaluateAll(rows => rows.map(row => ({
+    path: row.querySelector('.directory').textContent + row.querySelector('.filename').textContent,
+    added: row.querySelector('.file-count .added')?.textContent,
+    removed: row.querySelector('.file-count .removed')?.textContent ?? ''
+  })));
+  const expectedCounts = compare.files.map(file => ({ path: file.filename, added: `+${file.additions}`, removed: file.deletions ? `−${file.deletions}` : '' }));
+  ctx.check(JSON.stringify(counts) === JSON.stringify(expectedCounts), `all ${files.length} sidebar files show GitHub's combined additions and deletions`);
+  await ctx.shot('file-list-counts');
+
+  await page.getByRole('button', { name: 'File list display' }).click();
+  await page.getByRole('button', { name: 'Folders', exact: true }).click();
+  await page.keyboard.press('Escape');
+  const shared = compare.files.find(file => touched.filter(paths => paths.includes(file.filename)).length > 1) ?? compare.files[0];
+  await page.getByRole('button', { name: 'Search files', exact: true }).click();
+  const filter = page.getByPlaceholder('Filter files');
+  await filter.fill(shared.filename);
+  const decoration = page.locator(`[data-item-type="file"][data-item-path=${JSON.stringify(shared.filename)}] [data-item-section="decoration"]`);
+  await decoration.waitFor();
+  const count = (await decoration.innerText()).replace(/\s/g, '');
+  ctx.check(count === `+${shared.additions}${shared.deletions ? `−${shared.deletions}` : ''}`, `the folder tree shows the combined counts for ${shared.filename}: ${count}`);
+  await ctx.shot('file-tree-counts');
+  await filter.press('Escape');
 
   // A chip opens that PR's diff at the file, where the file's reviewed state is the PR's own
   const card = page.locator('.diff-card', { has: page.locator('.file-pull') }).nth(1);
