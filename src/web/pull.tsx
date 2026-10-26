@@ -18,7 +18,7 @@ import { FindBar, findMatches, scrollToMatch, useFindHighlights } from './find';
 import { clampFontSize, fontSizes, useDisplay, type DisplaySettings } from './display';
 import { contains } from './fuzzy';
 import { matchesPattern, useHiddenFiles } from './file-filters';
-import { homeLink, pullLink, pullViews, type PullViewName } from './links';
+import { pullLink, pullViews, type PullViewName } from './links';
 import { Avatar, CheckRow, focusOnKeyboardOpen, Kbd, PullIcon, RadioRows, Tip } from './ui';
 import type { AppSidebar } from './shell';
 import { ReviewLayout } from './review-layout';
@@ -68,7 +68,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   const { snapshot, guide: review, conversation, drafts } = detail, guide = review?.guide ?? null;
   const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`, number = snapshot.identity.number, pullKey = `${repo.toLowerCase()}#${number}`;
   const [display, setDisplay, resetDisplay] = useDisplay(), navigate = useNavigate();
-  const { isMobile, open: sidebarOpen, openMobile, setOpen: setSidebarOpen, setOpenMobile, toggleSidebar } = useSidebar();
+  const { isMobile, open: sidebarOpen, openMobile, setOpen: setSidebarOpen, setOpenMobile } = useSidebar();
   const sidebarVisible = isMobile ? openMobile : sidebarOpen;
   const viewedKey = `pr-guide:viewed:${pullKey}@${snapshot.headSHA}`;
   // Files matching a hidden pattern stay out of the Diff page's list, diffs and totals.
@@ -110,7 +110,6 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], [role="dialog"]')) return;
       const index = ['1', '2', '3'].indexOf(event.key);
       if (index !== -1) { event.preventDefault(); void navigate(pullLink(repo, number, pullViews[index][0])); return; }
-      if (event.key === 'f' || event.key === 'F') { event.preventDefault(); toggleSidebar(); return; }
       if (event.key === '/') { event.preventDefault(); searchFiles(); return; }
       if ((event.key !== 'j' && event.key !== 'k') || !items.length) return;
       let at = -1;
@@ -118,7 +117,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
       event.preventDefault(); scrollToElement(items[Math.min(items.length - 1, Math.max(0, event.key === 'j' ? at + 1 : at - 1))], offset);
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, [items.join('|'), view, offset, toggleSidebar, isMobile, setOpenMobile, setSidebarOpen]);
+  }, [items.join('|'), view, offset, isMobile, setOpenMobile, setSidebarOpen]);
   useEffect(() => {
     // Tracks which section or file is being read, for the section rail and file tree.
     let frame = 0;
@@ -225,7 +224,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   const displayMenu = <DisplayMenu positionMethod={view === 'diff' ? 'fixed' : undefined} display={display} onChange={setDisplay} onReset={resetDisplay} onExpand={() => setOpen(previous => ({ ...previous, [diffView]: pageFiles }))} onCollapse={() => setOpen(previous => ({ ...previous, [diffView]: [] }))} />;
   const heading = <PullHeading snapshot={snapshot} />;
   return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={reviewApi}>
-    <ReviewLayout navigation={navigation} repo={repo} number={number} title={snapshot.title} view={view} analyzing={analyzing}
+    <ReviewLayout navigation={navigation} repo={repo} number={number} title={snapshot.title} stack={detail.stack} view={view} analyzing={analyzing}
       sidebarFooter={filteredCount > 0 && <Tip content={hidden.enabled ? 'Show them' : 'Hide them'} delay="long"><Button variant="ghost" size="xs" className="min-w-0 flex-1 justify-start text-muted-foreground" onClick={() => hidden.setEnabled(!hidden.enabled)}>{hidden.enabled ? <EyeOff /> : <Eye />}<span className="truncate">{filteredCount} filtered {filteredCount === 1 ? 'file' : 'files'} {hidden.enabled ? 'hidden' : 'visible'}</span></Button></Tip>}
       sidebar={
       <SidebarGroup ref={fileSidebar} className="file-tree min-h-0 flex-1" aria-label="Files">

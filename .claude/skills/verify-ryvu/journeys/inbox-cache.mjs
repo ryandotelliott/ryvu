@@ -69,7 +69,7 @@ export default async function (ctx) {
     }
     const before = await rows();
     await page.locator('a.pull-row').first().click();
-    await page.locator('.pr-topbar a[aria-label="Pull requests"]').click();
+    await page.locator('[data-slot=sidebar]').getByRole('link', { name: 'Pull requests', exact: true }).click();
     ctx.check(await page.locator('a.pull-row').count() >= before.length, 'returning from a PR retains the cached list');
     ctx.check((await page.locator('.pull-group-heading').allTextContents()).every(text => text.startsWith('Created ')), 'returning from a PR retains the shared sort');
     await ctx.go('/'); await page.locator('a.pull-row').first().waitFor(); await settled();

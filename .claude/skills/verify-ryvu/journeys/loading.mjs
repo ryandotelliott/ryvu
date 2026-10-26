@@ -52,7 +52,7 @@ export default async function (ctx) {
     pending.release();
     await page.locator('.section-rail button').first().waitFor({ timeout: 60_000 });
     const title = await page.locator('.pr-heading h1').innerText();
-    await page.locator('.pr-topbar a[aria-label="Pull requests"]').click();
+    await page.locator('[data-slot=sidebar]').getByRole('link', { name: 'Pull requests', exact: true }).click();
     await page.locator('a.pull-row').first().waitFor({ timeout: 60_000 });
     await page.locator(`a.pull-row:not([href=${JSON.stringify(`/pr/${target.replace('#', '/')}`)}])`).first().click();
     await page.locator('.pr-page:not([aria-busy=true])').waitFor({ timeout: 60_000 });
@@ -80,7 +80,7 @@ export default async function (ctx) {
     await page.locator('.thread', { hasText: text }).getByRole('button', { name: 'Delete comment', exact: true }).click();
     await page.locator('.thread', { hasText: text }).waitFor({ state: 'detached' });
 
-    await page.locator('.pr-topbar a[aria-label="Pull requests"]').click();
+    await page.locator('[data-slot=sidebar]').getByRole('link', { name: 'Pull requests', exact: true }).click();
     await page.locator('a.pull-row').first().waitFor({ timeout: 60_000 });
     await page.getByRole('button', { name: 'Find a pull request' }).click();
     await page.getByPlaceholder('Search pull requests, or paste a link or number').fill(`https://github.com/${target.replace(/\/([0-9]+)$/, '/pull/$1')}`);

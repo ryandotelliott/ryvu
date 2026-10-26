@@ -9,9 +9,9 @@ export default async function (ctx) {
   const reviewed = page.locator('.diff-toolbar > .toolbar-progress');
   ctx.check(new RegExp(`^0/\\d+ reviewed$`).test((await reviewed.innerText()).trim()), `toolbar starts at "${(await reviewed.innerText()).trim()}"`);
 
-  if (!(await page.locator('.file-tree').count())) await page.keyboard.press('f');
+  if (!(await page.locator('.file-tree').count())) await page.keyboard.press(process.platform === 'darwin' ? 'Meta+b' : 'Control+b');
   await page.waitForSelector('.file-tree');
-  ctx.check(await page.locator('.file-tree').isVisible(), 'F opens the files sidebar');
+  ctx.check(await page.locator('.file-tree').isVisible(), 'the sidebar shortcut opens the files sidebar');
   await page.getByRole('button', { name: 'File list display', exact: true }).click();
   await page.getByRole('button', { name: 'Diff order', exact: true }).click();
   await page.keyboard.press('Escape');

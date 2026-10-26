@@ -13,8 +13,14 @@ export const commandKey = isMac ? '⌘' : 'Ctrl ';
 
 type NavigationProps = { active?: 'home' | 'settings'; settings: Settings | null; repoCounts: Record<string, number> | null; selectedRepo?: string; onSearch: () => void };
 
-export function SidebarToggle({ label = 'Toggle sidebar', hotkey = `${commandKey}B`, className }: { label?: string; hotkey?: string; className?: string }) {
-  return <Tip content={label} hotkey={hotkey} side="bottom"><SidebarTrigger aria-label={label} className={className} /></Tip>;
+// Hides the sidebar from inside it. Once hidden, a page's top bar shows `ShowSidebar` in its place.
+function HideSidebar() {
+  return <Tip content="Hide sidebar" hotkey={`${commandKey}B`} side="bottom"><SidebarTrigger aria-label="Hide sidebar" className="ml-1 shrink-0" /></Tip>;
+}
+export function ShowSidebar() {
+  const { isMobile, open, openMobile } = useSidebar();
+  if (isMobile ? openMobile : open) return null;
+  return <Tip content="Show sidebar" hotkey={`${commandKey}B`} side="bottom"><SidebarTrigger aria-label="Show sidebar" /></Tip>;
 }
 
 export function AppSidebar({ active, settings, repoCounts, selectedRepo, onSearch, children, footer }: NavigationProps & { children?: ReactNode; footer?: ReactNode }) {
@@ -24,7 +30,7 @@ export function AppSidebar({ active, settings, repoCounts, selectedRepo, onSearc
     <SidebarHeader>
       <div className="flex items-center">
         <SidebarMenu><SidebarMenuItem><SidebarMenuButton variant="outline" onClick={onSearch}><Search /><span className="min-w-0 flex-1 truncate">Find a pull request</span><Kbd>{commandKey}K</Kbd></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
-        <SidebarToggle label="Close sidebar" className="md:hidden" />
+        <HideSidebar />
       </div>
     </SidebarHeader>
     <SidebarContent className={children ? 'overflow-hidden' : undefined}>
@@ -64,7 +70,7 @@ export function AppShell({ children, ...navigation }: NavigationProps & { childr
   return <>
     <AppSidebar {...navigation} />
     <SidebarInset className="min-w-0">
-      <header className="flex h-12 shrink-0 items-center border-b px-3"><SidebarToggle /></header>
+      <header className="flex h-12 shrink-0 items-center border-b px-3"><ShowSidebar /></header>
       {children}
     </SidebarInset>
   </>;

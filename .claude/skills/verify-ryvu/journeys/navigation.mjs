@@ -47,9 +47,10 @@ export default async function (ctx) {
   ctx.check(await view() === 'Overview' && path() === base, 'back again returns to the Overview');
   await page.goForward();
   ctx.check(await view() === 'Guide' && path() === `${base}/guide`, 'forward returns to the Guide');
-  await page.locator('.pr-topbar a[aria-label="Pull requests"]').click();
+  ctx.check(await page.locator('.pr-topbar a[href="/"]').count() === 0, 'the top bar has no back arrow');
+  await page.locator('[data-slot=sidebar]').getByRole('link', { name: 'Pull requests', exact: true }).click();
   await page.waitForSelector('a.pull-row:not(.skeleton)', { timeout: 60_000 });
-  ctx.check(path() === '/', 'the back arrow returns to the list');
+  ctx.check(path() === '/', 'the sidebar’s Pull requests link returns to the list');
   await page.goBack();
   ctx.check(await view() === 'Guide', 'back from the list reopens the PR on the view you left');
   ctx.check(await kept(), 'none of these steps reloaded the page');

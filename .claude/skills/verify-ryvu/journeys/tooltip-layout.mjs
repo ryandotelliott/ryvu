@@ -14,7 +14,6 @@ export default async function (ctx) {
     ['Overview', tabs.getByRole('link', { name: 'Overview', exact: true })],
     ['Hide sidebar', page.getByRole('button', { name: 'Hide sidebar', exact: true })],
     ['Search files', page.getByRole('button', { name: 'Search files', exact: true })],
-    ['Pull requests', page.locator('.pr-topbar a[aria-label="Pull requests"]')],
   ]) {
     await trigger.hover();
     const popup = page.locator('[data-slot="tooltip-content"][data-open]').filter({ hasText: label });

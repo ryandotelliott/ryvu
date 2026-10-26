@@ -81,17 +81,26 @@ export default async function (ctx) {
   }
   await order('Diff order');
   ctx.check(await sidebar.locator('.list-file').count() === files.length, 'the display popover switches to a complete file list');
-  await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
+  const search = await sidebar.getByRole('button', { name: /Find a pull request/ }).boundingBox(), hide = await sidebar.getByRole('button', { name: 'Hide sidebar', exact: true }).boundingBox();
+  ctx.check(Math.abs(hide.y + hide.height / 2 - (search.y + search.height / 2)) <= 1 && hide.x > search.x + search.width, 'Hide sidebar sits inside the sidebar, right of the search button');
+  ctx.check(await page.locator('.pr-topbar').getByRole('button', { name: 'Show sidebar', exact: true }).count() === 0, 'the top bar has no sidebar button while the sidebar is open');
+  await ctx.shot('toggle-in-sidebar');
+  await sidebar.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-slot=sidebar-container]').getBoundingClientRect().right <= 0 && document.querySelector('.pr-page').getBoundingClientRect().left === 0);
   ctx.check(await page.locator('.pr-page').evaluate(el => el.getBoundingClientRect().left === 0), 'the shadcn trigger collapses the sidebar and releases its space');
+  ctx.check(await page.locator('.pr-topbar').getByRole('button', { name: 'Show sidebar', exact: true }).isVisible(), 'once collapsed, Show sidebar appears in the top bar');
+  await ctx.shot('toggle-in-topbar');
   await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-slot=sidebar-container]').getBoundingClientRect().left === 0);
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+b' : 'Control+b');
   await page.waitForFunction(() => document.querySelector('[data-slot=sidebar]').getAttribute('data-state') === 'collapsed');
   ctx.check(true, 'the standard shadcn keyboard shortcut toggles the sidebar');
   await page.keyboard.press('f');
+  await page.waitForTimeout(300);
+  ctx.check(await page.locator('[data-slot=sidebar]').getAttribute('data-state') === 'collapsed', 'F no longer toggles the sidebar');
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+b' : 'Control+b');
   await page.waitForFunction(() => document.querySelector('[data-slot=sidebar-container]').getBoundingClientRect().left === 0);
-  ctx.check(await sidebar.boundingBox().then(box => box.width === bounds.width), 'the F shortcut restores the default sidebar width');
+  ctx.check(await sidebar.boundingBox().then(box => box.width === bounds.width), 'the shortcut restores the default sidebar width');
   await page.locator('.pr-topbar .topbar-title').click();
   await page.evaluate(() => scrollTo(0, 600));
   ctx.check((await sidebar.boundingBox()).y === 0 && (await sidebar.boundingBox()).height === bounds.height, 'page scrolling keeps the full sidebar in place');
@@ -125,7 +134,7 @@ export default async function (ctx) {
   await sidebar.getByRole('button', { name: 'File list display', exact: true }).click();
   ctx.check(await page.getByRole('button', { name: 'Folders', exact: true }).isVisible(), 'file display settings open above the mobile drawer');
   await page.keyboard.press('Escape');
-  await sidebar.getByRole('button', { name: 'Close sidebar', exact: true }).click();
+  await sidebar.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
   await sidebar.waitFor({ state: 'detached' });
   ctx.check(await sidebar.count() === 0 && await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'closing the mobile drawer restores a page without horizontal overflow');
   await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();

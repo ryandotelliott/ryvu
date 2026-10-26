@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { assertSnapshotBudget, cacheKey, MODEL, parsePR, UserError, validateGuide } from './domain.js';
 import { fetchSnapshot, generateGuide } from './adapters.js';
-import { fetchConversation, fetchStatus } from './github.js';
+import { fetchConversation, fetchStack, fetchStatus } from './github.js';
 import type { Store } from './store.js';
-import type { Conversation, Guide, JobView, PRIdentity, PullDetail, PullStatus, Review, Snapshot } from './types.js';
-export type Dependencies = { fetch: (identity: PRIdentity, signal: AbortSignal) => Promise<Snapshot>; generate: (snapshot: Snapshot, signal: AbortSignal, ignored: readonly string[]) => Promise<Guide>; conversation: (identity: PRIdentity, signal: AbortSignal) => Promise<Conversation>; status: (identity: PRIdentity, signal: AbortSignal) => Promise<PullStatus> };
+import type { Conversation, Guide, JobView, PRIdentity, PullDetail, PullStack, PullStatus, Review, Snapshot } from './types.js';
+export type Dependencies = { fetch: (identity: PRIdentity, signal: AbortSignal) => Promise<Snapshot>; generate: (snapshot: Snapshot, signal: AbortSignal, ignored: readonly string[]) => Promise<Guide>; conversation: (identity: PRIdentity, signal: AbortSignal) => Promise<Conversation>; status: (identity: PRIdentity, signal: AbortSignal) => Promise<PullStatus>; stack: (identity: PRIdentity, signal: AbortSignal) => Promise<PullStack | null> };
 export class ReviewService {
-  constructor(private store: Store, private deps: Dependencies = { fetch: fetchSnapshot, generate: generateGuide, conversation: fetchConversation, status: fetchStatus }) {}
+  constructor(private store: Store, private deps: Dependencies = { fetch: fetchSnapshot, generate: generateGuide, conversation: fetchConversation, status: fetchStatus, stack: fetchStack }) {}
   // A stored guide for this head commit, if it still matches the current diff.
   cached(snapshot: Snapshot): Review | null {
     const review = this.store.guide(`${snapshot.identity.owner}/${snapshot.identity.repo}`, snapshot.identity.number, snapshot.headSHA);
@@ -15,10 +15,10 @@ export class ReviewService {
   }
   // Everything needed to read a PR without running analysis.
   async detail(identity: PRIdentity, viewer: Promise<string>, signal: AbortSignal): Promise<PullDetail> {
-    // The status panel is optional, so its failure leaves the rest of the page readable.
-    const [snapshot, conversation, login, status] = await Promise.all([this.deps.fetch(identity, signal), this.deps.conversation(identity, signal), viewer.catch(() => ''), this.deps.status(identity, signal).catch(() => null)]);
+    // The status panel and the stack are optional, so their failure leaves the rest of the page readable.
+    const [snapshot, conversation, login, status, stack] = await Promise.all([this.deps.fetch(identity, signal), this.deps.conversation(identity, signal), viewer.catch(() => ''), this.deps.status(identity, signal).catch(() => null), this.deps.stack(identity, signal).catch(() => null)]);
     const repo = `${identity.owner}/${identity.repo}`, guide = this.cached(snapshot);
-    return { snapshot, guide, prior: guide ? null : this.store.priorGuide(repo, identity.number, snapshot.headSHA), conversation, drafts: this.store.drafts(repo, identity.number), viewer: login, status };
+    return { snapshot, guide, prior: guide ? null : this.store.priorGuide(repo, identity.number, snapshot.headSHA), conversation, drafts: this.store.drafts(repo, identity.number), viewer: login, status, stack };
   }
   // `requested` are paths the reviewer hid; they are left out of what the model sees and recorded on the guide.
   async review(input: unknown, signal: AbortSignal, update: (state: 'loading' | 'generating', message: string) => void, fresh = false, requested: readonly string[] = []): Promise<Review> {
