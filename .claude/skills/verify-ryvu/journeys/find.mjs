@@ -7,6 +7,36 @@ export default async function (ctx) {
     const box = range.getBoundingClientRect();
     return box.top > 108 && box.bottom < innerHeight ? { text: range.toString(), top: Math.round(box.top) } : false;
   }, term)).jsonValue();
+  async function checkSelectedCode(previousQuery, label) {
+    const selected = await page.evaluate(previousQuery => {
+      for (const container of document.querySelectorAll('.diff-card.expanded diffs-container')) {
+        for (const row of container.shadowRoot?.querySelectorAll('[data-line]') ?? []) {
+          const box = row.getBoundingClientRect();
+          if (box.top < 108 || box.bottom > innerHeight) continue;
+          const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const word = (node.textContent.match(/[A-Za-z_]{7,}/g) ?? []).find(word => word !== previousQuery);
+            if (!word) continue;
+            const start = node.textContent.indexOf(word), range = document.createRange();
+            range.setStart(node, start); range.setEnd(node, start + word.length);
+            const selection = window.getSelection();
+            selection.removeAllRanges(); selection.addRange(range);
+            return selection.toString();
+          }
+        }
+      }
+      return '';
+    }, previousQuery);
+    ctx.check(Boolean(selected) && selected !== previousQuery, `${label}: selected a different word from the rendered diff's shadow DOM`);
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+    const input = page.getByLabel('Find in diff');
+    ctx.check(await input.inputValue() === selected, `${label}: opening find uses the selected code as its query`);
+    await input.press('Escape');
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+    ctx.check(await input.inputValue() === selected, `${label}: reopening with no selection keeps the previous query`);
+    await input.press('Escape');
+  }
   await page.addInitScript(() => localStorage.setItem('pr-guide:find-collapsed', 'false'));
   const { files, path } = await pickLargePull(ctx);
   // A word that really appears in a changed line, so the search has something to find.
@@ -38,6 +68,7 @@ export default async function (ctx) {
 
   await input.press('Escape'); await page.waitForTimeout(300);
   ctx.check(await page.locator('.find-bar').count() === 0, 'Esc closes the find bar');
+  await checkSelectedCode(term, 'Diff');
 
   const target = process.env.VERIFY_GUIDE_PR;
   if (!target) { ctx.note('Guide positioning not checked; set VERIFY_GUIDE_PR to a PR with a saved guide.'); return; }
@@ -75,4 +106,5 @@ export default async function (ctx) {
   }
   await input.press('Escape');
   ctx.check(await page.locator('.find-bar').count() === 0, 'closing Guide find removes the floating bar');
+  await checkSelectedCode(guideTerm, 'Guide');
 }

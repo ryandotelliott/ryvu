@@ -203,7 +203,14 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     function onKey(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || view === 'overview') return;
       const key = event.key.toLowerCase();
-      if (key === 'f') { event.preventDefault(); setFind(previous => ({ ...previous, open: true, focus: previous.focus + 1 })); }
+      if (key === 'f') {
+        event.preventDefault();
+        const field = document.activeElement;
+        const selection = (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== null && field.selectionEnd !== null
+          ? field.value.slice(field.selectionStart, field.selectionEnd)
+          : window.getSelection()?.toString() ?? '';
+        setFind(previous => ({ ...previous, open: true, query: selection || previous.query, index: selection ? 0 : previous.index, focus: previous.focus + 1 }));
+      }
       else if (key === 'g' && find.open) { event.preventDefault(); stepMatch(event.shiftKey ? -1 : 1); }
     }
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);

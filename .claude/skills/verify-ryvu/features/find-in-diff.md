@@ -4,7 +4,7 @@
 
 ## Sub-features
 
-- `find-open` opens the bar with the input focused; ⌘F again reselects the text.
+- `find-open` opens the bar with the input focused and uses selected text as the query. With no selection, it keeps the previous query; ⌘F again reselects the text.
 - `find-count` shows `i of n` for the query.
 - `find-collapsed` always includes collapsed files and opens a matching file when jumping to it.
 - `find-step` moves with Enter / Shift+Enter or ⌘G / ⇧⌘G, centring the match.
@@ -24,6 +24,7 @@ Preconditions:
 - **Open.** `go('/pr/…/diff')`, `waitForDiffRows()`, press `Meta+f`. The focused element has aria-label `Find in diff`.
 - **Count.** Collapse all files through Display settings, then fill the input with the term. `.find-count` matches `^\d+ of \d+$`.
 - **Step.** Press Enter in the input. `CSS.highlights.get('pr-find-current')` holds one range whose text equals the term, on screen between 108px and the viewport bottom.
+- **Selection.** Select a different word in a rendered diff, then press ⌘F. The input contains that word, including when it came from the diff renderer's shadow DOM. Close and reopen with no selection to check that the query is retained.
 - **Close.** Press Escape. `.find-bar` is gone.
 - **Proof.** Screenshot with the highlighted current match.
 

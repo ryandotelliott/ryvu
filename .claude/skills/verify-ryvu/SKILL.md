@@ -70,6 +70,7 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 
 - Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`.
 - `expansion` (needs `VERIFY_GUIDE_PR`): unviewed Guide blocks start expanded; manual toggles, viewed actions and bulk controls preserve the other tab's expansion; viewed state survives reloads.
+- `guide-scroll` (needs `VERIFY_GUIDE_PR` with a long explanation): wheel scrolling continues onto the page at both edges of the explanation, including in a short viewport.
 - `loading` (needs `VERIFY_GUIDE_PR`): inbox placeholder heights at desktop and mobile widths, solid code placeholders, cached PR revisits during a delayed refresh, local drafts preserved during that refresh, and the Analyze shortcut reusing a saved Guide after refreshing.
 - `review-sidebar`: full-height app navigation and files on all review views, compact folder labels, resizing and saved width, file search, file display settings, shadcn collapse controls, and the mobile Sheet.
 - `inbox-options`: nested list controls, searchable repository and author subpanels, date/repository sections, paginated ordering and narrow-screen fitting.
