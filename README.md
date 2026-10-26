@@ -2,21 +2,81 @@
 
 A personal, localhost-only reading interface inspired by Linear's Guide view. The home page lists open pull requests from the repositories you choose in Settings. Opening one shows its description, conversation and diffs, where you can leave line comments and submit a review. **Analyze** turns the diff into purpose-based sections with before/after explanations and links to exact changed lines. Viewed files are remembered in this browser per head commit.
 
-## Run
+## Setup
 
-Node 22.12 or later, `pnpm`, `gh`, and the Codex CLI must be on PATH (`just` is optional; its recipes wrap the pnpm scripts). Real generation uses their existing sign-ins (`gh auth status`, `codex login status`). It does not create credentials. The selected model is `gpt-6-luna` with high reasoning.
+### Install prerequisites
+
+- [Node.js](https://nodejs.org/en/download), version 22.12 or later.
+- Git to clone the repository.
+- [pnpm](https://pnpm.io/installation) to install dependencies and run the app.
+- [GitHub CLI](https://cli.github.com/) (`gh`) to read PRs and post reviews with your GitHub account.
+- [Codex CLI](https://developers.openai.com/codex/cli) (`codex`) to generate guides with **Analyze**. Browsing PRs and reading saved guides does not require Codex.
+
+Install the CLIs on the machine that runs the app server. Keep `gh` on its `PATH`, and add `codex` there to use **Analyze**. `just` is optional; its recipes wrap the pnpm scripts.
+
+### Sign in to the CLIs
+
+If you have not already signed in, run:
 
 ```sh
-cd ~/dev/ryvu
-pnpm install
+gh auth login --hostname github.com
+codex login
+```
+
+Use a GitHub account with access to the repositories you want to review. Confirm both sign-ins before using **Analyze**:
+
+```sh
+gh auth status --hostname github.com
+codex login status
+```
+
+Ryvu reuses these CLI sign-ins. It does not require a separate app login or an API key configured in the app.
+
+### Start the app
+
+```sh
+git clone https://github.com/ryandotelliott/ryvu.git
+cd ryvu
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-`pnpm dev` (or `just dev`) runs the app on Vite with TanStack Start. Open **http://127.0.0.1:5173**, or set `WEB_PORT` for another port. One process serves the pages and the server functions. UI edits hot-reload in place, and an edit to a `src/*.functions.ts` file applies to the next call. An edit to any other server file directly in `src/` restarts the server's runtime. A running analysis stops, and an open page asks you to reload. Ctrl-C stops any running analysis and then the server.
+If you already cloned the repository, start with `cd` into that checkout.
 
-`just start` builds and serves the production build at **http://127.0.0.1:4317** (`PORT=4318 just start` for another port). Both servers bind only to 127.0.0.1. Data (saved guides, drafts, settings) lives in `.data/`; `PR_GUIDE_DATA_DIR` points a server somewhere else, which is how verification runs stay isolated. `just typecheck` checks all sources; `just` lists every recipe.
+Open **http://127.0.0.1:5173**. Add a repository as `owner/repo` on the empty home page or in **Settings**, then open a PR. Choose **Analyze** to generate a guide. The app creates its local data files automatically; no `.env` file or database setup is required.
 
-Add repositories in **Settings** (or on the empty home page). The home page lists their open PRs through `gh`, with tabs for review requests, your own PRs and PRs with a cached guide, plus repository, author and draft filters. Press **⌘K** (Ctrl K elsewhere) to search: type to match titles, authors and `repo#number` (titles of older PRs are searched on GitHub as you type), or paste `1234`, `#1234`, `owner/repo#1234`, or any PR link including trailing paths such as `/changes?w=1`.
+Keep the terminal running while you use the app. Ctrl-C stops any running analysis and then the server.
+
+## Backend and local data
+
+One local Node.js process runs the TanStack Start app and its server functions:
+
+- `gh api` fetches PRs, diffs and conversations, and posts reviews or replies when you submit them.
+- `codex exec` generates guides when you choose **Analyze** or **Re-analyze**. The app currently selects `gpt-6-luna` with high reasoning in `src/domain.ts` and `src/adapters.ts`.
+- Node's built-in SQLite stores saved guides and pending comments in `.data/ryvu.db`. Repository settings live in `.data/settings.json`.
+
+The CLIs are subprocesses of the app server. You do not run separate GitHub, Codex or database servers. Set `PR_GUIDE_DATA_DIR` to use a different data directory.
+
+## Run the production build
+
+```sh
+pnpm build
+pnpm start
+```
+
+Open **http://127.0.0.1:4317**. Run `pnpm build` again after changing the source. `just start` combines both commands.
+
+Both servers bind only to `127.0.0.1`. Set `WEB_PORT` to change the development port or `PORT` to change the production port, for example `WEB_PORT=5174 pnpm dev` or `PORT=4318 pnpm start`.
+
+## Development
+
+`pnpm dev` runs Vite with TanStack Start. UI edits hot-reload in place, and an edit to a `src/*.functions.ts` file applies to the next call. An edit to any other server file directly in `src/` restarts the server's runtime. A running analysis stops, and an open page asks you to reload.
+
+`pnpm typecheck` checks all sources. If you use `just`, run it without arguments to list its recipes.
+
+## Use the app
+
+The home page lists open PRs from your repositories through `gh`, with tabs for review requests, your own PRs and PRs with a cached guide, plus repository, author and draft filters. Press **⌘K** (Ctrl K elsewhere) to search: type to match titles, authors and `repo#number` (titles of older PRs are searched on GitHub as you type), or paste `1234`, `#1234`, `owner/repo#1234`, or any PR link including trailing paths such as `/changes?w=1`.
 
 Opening a PR fetches it through `gh` without any model calls. **Analyze** sends its numbered snapshot hunks to Codex, which consumes normal account inference usage; ⇧↵ in search opens a PR's guide and analyzes it if needed. Guides are stored per head commit, so a PR is only analyzed again after new commits (or when you choose **Re-analyze**).
 
@@ -40,7 +100,6 @@ The four PR lists share their loaded rows. Switching tabs shows known matches im
 - Settings (repositories, page size and default visibility) are stored in `.data/settings.json`. PR list responses are cached for 30 seconds, and loaded browser rows remain available until a full page reload.
 - PR descriptions and comments render a safe Markdown subset (no raw HTML).
 - Cancel an active generation; a newer request supersedes an earlier one for this browser session.
-- Local progress and private, SHA/model/prompt-version-specific guide cache in `.data/cache`.
 - Explicit limitations for missing/binary/partial patches; all changed files must be accounted for.
 - Strict schema and exact hunk-range validation before a result is shown or cached.
 
@@ -54,4 +113,4 @@ The server answers only requests whose Host names its own 127.0.0.1 or localhost
 
 ## Validation
 
-There is no automated test suite. `just typecheck` checks all sources, and `just build` builds the app and then type-checks it. To drive the real app in a browser and capture evidence, use the `verify-ryvu` skill in `.claude/skills/verify-ryvu/` (`SKILL.md` has the launch, doctor, drive and cleanup commands).
+`pnpm typecheck` checks all sources, and `pnpm build` builds the app and then type-checks it. `pnpm test:inbox` runs the inbox cache and ordering tests. To drive the real app in a browser and capture evidence, use the `verify-ryvu` skill in `.claude/skills/verify-ryvu/` (`SKILL.md` has the launch, doctor, drive and cleanup commands).
