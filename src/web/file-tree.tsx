@@ -14,11 +14,12 @@ import { focusOnKeyboardOpen, Segmented, Switch, Tip } from './ui';
 import type { ChangedFile } from '../types';
 
 const statuses: Record<string, GitStatus> = { added: 'added', removed: 'deleted', renamed: 'renamed' };
-const colors = { added: 'var(--added)', removed: 'var(--removed)', read: 'var(--text-4)' };
+const colors = { added: 'var(--added)', removed: 'var(--removed)', read: 'var(--text-4)', tag: 'var(--text-3)' };
 
 // The changed files as a folder tree. `current` follows the file being read; picking a file reports it through `onPick`.
-export function ChangedFileTree({ files, viewed, current, search, onPick }: { files: ChangedFile[]; viewed: string[]; current: string | null; search: string; onPick: (path: string) => void }) {
-  const latest = useRef({ viewed, onPick }); latest.current = { viewed, onPick };
+// `tags`, on a range, name the PRs that changed each file in place of its line counts.
+export function ChangedFileTree({ files, viewed, current, search, tags, onPick }: { files: ChangedFile[]; viewed: string[]; current: string | null; search: string; tags?: Map<string, string>; onPick: (path: string) => void }) {
+  const latest = useRef({ viewed, tags, onPick }); latest.current = { viewed, tags, onPick };
   // Selecting the current file programmatically also fires onSelectionChange; this skips that echo.
   const echo = useRef<string | null>(null), shown = useRef(false);
   const { model } = useFileTree({
@@ -35,7 +36,8 @@ export function ChangedFileTree({ files, viewed, current, search, onPick }: { fi
     renderRowDecoration: ({ item }) => {
       const file = item.kind === 'file' ? files.find(candidate => candidate.path === item.path) : null;
       if (!file) return null;
-      const read = latest.current.viewed.includes(file.path);
+      const read = latest.current.viewed.includes(file.path), tag = latest.current.tags?.get(file.path);
+      if (latest.current.tags) return tag ? { text: tag, parts: [{ text: tag, color: read ? colors.read : colors.tag }] } : null;
       const parts = [{ text: `+${file.additions}`, color: read ? colors.read : colors.added }, ...(file.deletions ? [{ text: `\u00a0−${file.deletions}`, color: read ? colors.read : colors.removed }] : [])];
       return { text: parts.map(part => part.text).join(''), parts };
     }
@@ -56,13 +58,13 @@ export function ChangedFileTree({ files, viewed, current, search, onPick }: { fi
 }
 
 // The changed files in the order the diff shows them.
-export function ChangedFileList({ files, viewed, current, search, onPick }: { files: ChangedFile[]; viewed: string[]; current: string | null; search: string; onPick: (path: string) => void }) {
+export function ChangedFileList({ files, viewed, current, search, tags, onPick }: { files: ChangedFile[]; viewed: string[]; current: string | null; search: string; tags?: Map<string, string>; onPick: (path: string) => void }) {
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { list.current?.querySelector('.is-current')?.scrollIntoView({ block: 'nearest' }); }, [current, search]);
   return <div className="changed-file-list" ref={list}>{files.filter(file => contains(search, file.path)).map(file => {
     const { name, directory } = splitPath(file.path);
     return <Tip key={file.path} content={file.path} delay="long" side="right"><button type="button" className={`list-file ${file.path === current ? 'is-current' : ''} ${viewed.includes(file.path) ? 'is-read' : ''}`} onClick={() => onPick(file.path)}>
-      <FileCode2 size={13} /><span className="filename">{name}</span><span className="directory">{directory}</span><FileCount file={file} />
+      <FileCode2 size={13} /><span className="filename">{name}</span><span className="directory">{directory}</span>{tags ? <span className="file-tags">{tags.get(file.path)}</span> : <FileCount file={file} />}
     </button></Tip>;
   })}</div>;
 }

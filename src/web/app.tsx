@@ -4,7 +4,7 @@ import { ArrowLeft, ExternalLink, RotateCw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { listPulls, openSession } from '../inbox.functions';
 import { cancelAnalysis, getAnalysis, startAnalysis } from '../jobs.functions';
-import { getPull } from '../pull.functions';
+import { getPull, getRange } from '../pull.functions';
 import { setSessionToken } from '../session';
 import { AppContext, useApplication } from './application-context';
 import { recall } from './browser-state';
@@ -14,6 +14,7 @@ import { homeLink, pullLink, type PullTarget } from './links';
 import { CommandPalette } from './palette';
 import { AppShell } from './shell';
 import { PullSkeleton } from './pull-skeleton';
+import { rangeLabel } from './pull-page';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { PullIcon, StatusBox } from './ui';
 import type { JobView, PullDetail, PullPage as PullList, Settings } from '../types';
@@ -43,7 +44,7 @@ function useAppState() {
     const version = ++loadSequence.current, previous = pulls[next.key];
     setLoadError('');
     try {
-      const detail = await getPull({ data: { repo: next.repo, number: next.number } });
+      const detail = next.through ? await getRange({ data: { repo: next.repo, number: next.number, through: next.through } }) : await getPull({ data: { repo: next.repo, number: next.number } });
       if (version === loadSequence.current) {
         setPulls(current => ({ ...current, [next.key]: current[next.key] === previous ? detail : current[next.key] }));
         setConfirmedPull({ key: next.key, version });
@@ -108,14 +109,14 @@ export function PullPage({ target }: { target: PullTarget }) {
     void navigate({ ...pullLink(target.repo, target.number, 'guide'), replace: true });
     if (!shown.guide && !(app.analyzing && app.jobKey === target.key)) void app.analyze(target, false, shown.snapshot.files.map(file => file.path));
   }, [target.key, target.analyze, Boolean(shown), app.confirmedPull]);
-  useEffect(() => { document.title = shown ? `${shown.snapshot.title} · PR Guide` : 'Loading · PR Guide'; }, [shown, target.key]);
+  useEffect(() => { document.title = shown ? `${shown.range ? rangeLabel(shown.range) : shown.snapshot.title} · PR Guide` : 'Loading · PR Guide'; }, [shown, target.key]);
   const forThis = app.jobKey === target.key;
   const navigation = { settings: app.settings, repoCounts: app.repoCounts, onSearch: app.openPalette };
   const preparing = <Preparing target={target} navigation={navigation} error={app.loadError} onRetry={() => void app.load(target)} />;
   if (!shown) return preparing;
   const status = forThis && (app.analyzing || app.jobError || app.job?.state === 'cancelled') ? <StatusBox key={app.epoch.current} job={app.job} error={app.jobError} canCancel={Boolean(app.currentJob.current)} onCancel={() => void app.cancel()} /> : null;
   return <Suspense fallback={preparing}>
-    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} navigation={navigation} status={status} analyzing={forThis && app.analyzing}
+    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} through={target.through} navigation={navigation} status={status} analyzing={forThis && app.analyzing}
       onDetail={update => app.setPulls(current => current[target.key] ? { ...current, [target.key]: update(current[target.key]) } : current)}
       onAnalyze={fresh => void app.analyze(target, fresh, shown.snapshot.files.map(file => file.path))} />
   </Suspense>;

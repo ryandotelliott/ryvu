@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { guidePrompt, guideSchema, MODEL, normalizeFile, UserError, validateGuide } from './domain.js';
 import { runCommand, type Runner } from './process.js';
-import type { Guide, PRIdentity, Snapshot } from './types.js';
+import type { ChangedFile, Guide, PRIdentity, Snapshot } from './types.js';
 function metadata(value: unknown): Record<string, any> {
   if (!value || typeof value !== 'object') throw new UserError('GitHub returned invalid PR metadata.');
   const d = value as Record<string, any>;
@@ -27,6 +27,16 @@ export async function fetchSnapshot(identity: PRIdentity, signal: AbortSignal, r
   const state = last.merged_at ? 'merged' : last.state === 'closed' ? 'closed' : 'open';
   const snapshot: Snapshot = { identity, title: last.title.slice(0, 500), body: body.slice(0, 8000), author: String(last.user?.login ?? 'unknown'), baseSHA: last.base.sha, headSHA: last.head.sha, fetchedAt: new Date().toISOString(), warnings, files, headRef: String(last.head?.ref ?? ''), baseRef: String(last.base?.ref ?? ''), state, draft: Boolean(last.draft), createdAt: String(last.created_at ?? '') };
   signal.throwIfAborted(); return snapshot;
+}
+// The changes from base to head as GitHub's compare view shows them, measured from the commits' merge base. Read-only.
+export async function fetchCompare(identity: PRIdentity, base: string, head: string, signal: AbortSignal, runner: Runner = runCommand): Promise<{ baseSHA: string; files: ChangedFile[] }> {
+  if (![base, head].every(sha => /^[a-f0-9]{40}$/.test(sha))) throw new UserError('Invalid commits to compare.', 400);
+  // The files come with the first page of commits, so one commit per page keeps the response small.
+  const value = JSON.parse(await runner('gh', ['api', `repos/${identity.owner}/${identity.repo}/compare/${base}...${head}?per_page=1`], { signal, maxBytes: 20_000_000 }));
+  const baseSHA = value?.merge_base_commit?.sha, files: unknown = value?.files ?? [];
+  if (typeof baseSHA !== 'string' || !/^[a-f0-9]{40}$/.test(baseSHA) || !Array.isArray(files)) throw new UserError('GitHub returned an invalid comparison.');
+  if (files.length >= 300) throw new UserError('Together these pull requests change more than 300 files, more than GitHub can compare at once. Review fewer of them together.');
+  signal.throwIfAborted(); return { baseSHA, files: files.map(normalizeFile) };
 }
 // The model only receives supplied data: user config, hooks, connectors, browser,
 // shell, code mode, agents, memory and image tools are disabled for this process.

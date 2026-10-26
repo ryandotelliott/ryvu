@@ -11,6 +11,8 @@ export const DiffSourceContext = createContext<DiffSource | null>(null);
 
 export const commentAnchor = (data: CommentData) => data.kind === 'thread' ? `thread-${data.thread.id}` : `draft-${data.draft.id}`;
 export const fileAnchor = (path: string) => `file-${encodeURIComponent(path).replace(/%/g, '_')}`;
+// A range's name, bottom PR first, from its PRs listed top first.
+export const rangeLabel = (pulls: readonly { number: number }[]) => `#${pulls[pulls.length - 1].number} – #${pulls[0].number}`;
 export function splitPath(path: string) { const parts = path.split('/'); const name = parts.pop()!; return { name, directory: parts.length ? `${parts.join('/')}/` : '' }; }
 
 // The page's virtualizer, so programmatic scrolls can tell it the scroll position changed (see scrollPageBy).

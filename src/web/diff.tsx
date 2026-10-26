@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Link } from '@tanstack/react-router';
 import { FileDiff, VirtualizerContext, WorkerPoolContextProvider } from '@pierre/diffs/react';
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
 import { DEFAULT_VIRTUAL_FILE_METRICS, parsePatchFiles, Virtualizer, type DiffLineAnnotation, type SelectedLineRange } from '@pierre/diffs';
@@ -6,11 +7,12 @@ import { ChevronRight, Code2, Eye, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Annotation, type AnnotationData, type CommentData } from './comments';
+import { pullLink } from './links';
 import { hideWhitespace, lineHeightFor, type DisplaySettings } from './display';
 import { commentAnchor, DiffSourceContext, fileAnchor, pageVirtualizer, splitPath, useReview } from './pull-page';
 import { ErrorBoundary, Tip } from './ui';
 import { readFile } from '../pull.functions';
-import type { ChangedFile, DraftComment, CommentThread } from '../types';
+import type { ChangedFile, DraftComment, CommentThread, RangePull } from '../types';
 
 export function FileCount({ file }: { file: ChangedFile }) {
   return <span className="file-count"><span className="added">+{file.additions}</span>{file.deletions > 0 && <span className="removed">−{file.deletions}</span>}</span>;
@@ -82,13 +84,15 @@ const fileAt = (source: DiffSource, sha: string, path: string) => readFile({ dat
 const MarkdownPreview = lazy(() => import('./markdown-preview'));
 
 // Memoized with path-taking callbacks, so a change elsewhere on the page doesn't re-render every diff.
-export const DiffCard = memo(function DiffCard({ file, open, viewed, onToggle, onViewed, display, selectedLines, onSelectionChange, preview, onPreview }: { file: ChangedFile; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; selectedLines: SelectedLineRange | null; onSelectionChange: (path: string, range: SelectedLineRange | null) => void; preview: boolean; onPreview: (path: string, preview: boolean) => void }) {
-  const review = useReview(), { name, directory } = splitPath(file.path);
+// On a range, `pulls` are the PRs in it that changed the file; each links to that PR's diff at this file.
+export const DiffCard = memo(function DiffCard({ file, pulls, open, viewed, onToggle, onViewed, display, selectedLines, onSelectionChange, preview, onPreview }: { file: ChangedFile; pulls?: RangePull[]; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; selectedLines: SelectedLineRange | null; onSelectionChange: (path: string, range: SelectedLineRange | null) => void; preview: boolean; onPreview: (path: string, preview: boolean) => void }) {
+  const review = useReview(), source = useContext(DiffSourceContext), { name, directory } = splitPath(file.path);
   // Only open threads on lines still in the diff show on the file, so only those count.
   const commentCount = (review?.threads.filter(thread => thread.path === file.path && thread.line !== null && !thread.resolved).length ?? 0) + (review?.drafts.filter(draft => draft.path === file.path).length ?? 0);
   return <article className={`diff-card ${open ? 'expanded' : ''} ${viewed ? 'is-read' : ''}`} id={fileAnchor(file.path)}>
     <div className="file-heading">
       <button type="button" className="file-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} ${file.path}`} aria-expanded={open} onClick={() => onToggle(file.path)}><ChevronRight size={13} className="chevron" /><span className="filename">{name}</span><span className="directory">{directory}</span><FileStatus file={file} /></button>
+      {source && pulls && pulls.length > 0 && <span className="file-pulls">{pulls.map(pull => <Tip key={pull.number} content={`Open this file in #${pull.number}: ${pull.title}`} delay="long"><Link {...pullLink(source.repo, pull.number, 'diff')} hash={fileAnchor(file.path)} className="file-pull">#{pull.number}</Link></Tip>)}</span>}
       {commentCount > 0 && <Tip content={`${commentCount} comment ${commentCount === 1 ? 'thread' : 'threads'}`}><span className="comment-count"><MessageSquare size={12} />{commentCount}</span></Tip>}
       {/\.(md|markdown|mdown|mkd)$/i.test(file.path) && <Tip content={preview ? 'Show diff' : 'Preview Markdown'}><Button variant="ghost" size="icon-sm" aria-label={preview ? 'Show diff' : 'Preview Markdown'} aria-pressed={preview} onClick={() => { onPreview(file.path, !preview); if (!open) onToggle(file.path); }}>{preview ? <Code2 /> : <Eye />}</Button></Tip>}
       <FileCount file={file} />

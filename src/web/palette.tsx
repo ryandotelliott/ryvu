@@ -60,7 +60,7 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
   const close = () => onOpenChange(false);
   const openPull = ({ repo, number }: Target, mode: 'open' | 'github' | 'guide' = 'open') => {
     close();
-    if (mode === 'github') window.open(`https://github.com/${repo}/pull/${number}`, '_blank', 'noreferrer'); else void navigate(pullLink(repo, number, mode === 'guide' ? 'guide' : 'overview', mode === 'guide'));
+    if (mode === 'github') window.open(`https://github.com/${repo}/pull/${number}`, '_blank', 'noreferrer'); else void navigate(pullLink(repo, number, mode === 'guide' ? 'guide' : 'overview', { analyze: mode === 'guide' }));
   };
   const groups = useMemo<Group[]>(() => {
     if (!trimmed) return [
