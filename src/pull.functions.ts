@@ -17,6 +17,14 @@ export const getPull = createServerFn({ method: 'GET' })
   .validator((input: PullRef) => pullFrom(fields(input)))
   .handler(({ data }) => { const { service, inbox } = runtime(); return service.detail(data, inbox.login(), new AbortController().signal); });
 
+export const getRange = createServerFn({ method: 'GET' })
+  .validator((input: PullRef & { through: number }) => {
+    const raw = fields(input), pull = pullFrom(raw);
+    if (!Number.isSafeInteger(raw.through) || Number(raw.through) < 1 || raw.through === pull.number) throw new UserError('Pick another pull request from the stack.', 400);
+    return { pull, through: Number(raw.through) };
+  })
+  .handler(({ data }) => { const { service, inbox } = runtime(); return service.range(data.pull, data.through, inbox.login(), new AbortController().signal); });
+
 export const readFile = createServerFn({ method: 'GET' })
   .validator((input: { repo: string; sha: string; path: string }) => {
     const raw = fields(input), [owner, repo] = parseRepo(raw.repo).split('/');

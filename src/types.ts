@@ -34,4 +34,7 @@ export type PullStatus = { requested: { name: string; team: boolean }[]; checks:
 export type StackedPull = { number: number; title: string; state: 'open' | 'closed' | 'merged'; draft: boolean; additions: number; deletions: number; checks: PullStatus['checks'] };
 // PRs that build on each other, from GitHub's stacked pull requests. `pulls` runs from the top of the stack down to the PR that merges into `base`.
 export type PullStack = { base: string; pulls: StackedPull[] };
-export type PullDetail = { snapshot: Snapshot; guide: Review | null; prior: PriorGuide | null; conversation: Conversation; drafts: DraftComment[]; viewer: string; status: PullStatus | null; stack: PullStack | null };
+// One PR of a range reviewed together, with the paths it changed (old paths of renames included).
+export type RangePull = StackedPull & { author: string; body: string; baseRef: string; headRef: string; files: string[] };
+// `range` is set when the page shows several PRs of one stack as one diff. It runs top first, like `PullStack.pulls`.
+export type PullDetail = { snapshot: Snapshot; guide: Review | null; prior: PriorGuide | null; conversation: Conversation; drafts: DraftComment[]; viewer: string; status: PullStatus | null; stack: PullStack | null; range: RangePull[] | null };

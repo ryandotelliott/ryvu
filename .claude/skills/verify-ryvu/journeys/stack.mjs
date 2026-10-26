@@ -21,7 +21,7 @@ export default async function (ctx) {
   await page.locator('.stack-menu').evaluate(menu => Promise.all(menu.getAnimations().map(animation => animation.finished)));
   const numbers = (await rows.locator('.topbar-number').allInnerTexts()).map(text => Number(text.replace('#', '')));
   ctx.check(JSON.stringify(numbers) === JSON.stringify(expected), `the menu lists the stack top first: ${numbers.join(', ')}`);
-  ctx.check(await page.locator('.stack-label').innerText() === `${expected.length} stacked`, 'the menu counts the stacked PRs');
+  ctx.check(await page.locator('.stack-label span').first().innerText() === `${expected.length} stacked`, 'the menu counts the stacked PRs');
   const current = page.locator('.stack-row[aria-current="page"]');
   ctx.check(await current.count() === 1 && (await current.innerText()).includes(`#${number}`), 'only this PR is marked current');
   ctx.check(await rows.locator('.stack-diff .added').count() === expected.length, 'every row shows its diff stats');

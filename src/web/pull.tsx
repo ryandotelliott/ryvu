@@ -24,7 +24,8 @@ import type { AppSidebar } from './shell';
 import { ReviewLayout } from './review-layout';
 import { inline, Markdown } from './markdown';
 import { fileAnchor, ReviewContext, scrollPageBy, splitPath } from './pull-page';
-import type { ChangedFile, Chapter, PullDetail, ReviewEvent, Snapshot } from '../types';
+import { RangeOverview } from './range';
+import type { ChangedFile, Chapter, PullDetail, RangePull, ReviewEvent, Snapshot } from '../types';
 
 // Heights of the sticky top bar and the diff toolbar, so scrolled-to content lands below them.
 const topbar = 48, toolbar = 44, initiallyOpen = 12;
@@ -64,13 +65,16 @@ function seekComment(anchor: string, fileId: string, offset: number) {
   step();
 }
 
-export function PullView({ detail, onDetail, view, navigation, status, analyzing, onAnalyze }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; navigation: ComponentProps<typeof AppSidebar>; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void }) {
-  const { snapshot, guide: review, conversation, drafts } = detail, guide = review?.guide ?? null;
+// With `through`, `detail` is a range: several PRs of one stack read as one diff, with no guide and no comments.
+export function PullView({ detail, onDetail, view, through, navigation, status, analyzing, onAnalyze }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; through: number | null; navigation: ComponentProps<typeof AppSidebar>; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void }) {
+  const { snapshot, guide: review, conversation, drafts, range } = detail, guide = review?.guide ?? null;
   const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`, number = snapshot.identity.number, pullKey = `${repo.toLowerCase()}#${number}`;
   const [display, setDisplay, resetDisplay] = useDisplay(), navigate = useNavigate();
   const { isMobile, open: sidebarOpen, openMobile, setOpen: setSidebarOpen, setOpenMobile } = useSidebar();
   const sidebarVisible = isMobile ? openMobile : sidebarOpen;
-  const viewedKey = `pr-guide:viewed:${pullKey}@${snapshot.headSHA}`;
+  // A range keeps its own reviewed files; a file's diff in a range differs from its diff in any one PR.
+  const viewedKey = `pr-guide:viewed:${range ? `${repo.toLowerCase()}#${range[range.length - 1].number}..${range[0].number}` : pullKey}@${snapshot.headSHA}`;
+  const link = (target: PullViewName) => pullLink(repo, number, target, { through });
   // Files matching a hidden pattern stay out of the Diff page's list, diffs and totals.
   const hidden = useHiddenFiles(repo), patterns = hidden.enabled ? hidden.patterns : [];
   const shown = useMemo(() => snapshot.files.filter(file => !patterns.some(pattern => matchesPattern(pattern, file.path))), [snapshot.files, patterns.join('\n')]);
@@ -110,7 +114,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
       if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
       if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, [contenteditable], [role="dialog"]')) return;
       const index = ['1', '2', '3'].indexOf(event.key);
-      if (index !== -1) { event.preventDefault(); void navigate(pullLink(repo, number, pullViews[index][0])); return; }
+      if (index !== -1) { event.preventDefault(); if (!range || pullViews[index][0] !== 'guide') void navigate(link(pullViews[index][0])); return; }
       if (event.key === '/') { event.preventDefault(); searchFiles(); return; }
       if ((event.key !== 'j' && event.key !== 'k') || !items.length) return;
       let at = -1;
@@ -145,7 +149,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   function pickFile(path: string) {
     const targetView = view === 'guide' && chapters.some(chapter => chapter.files.includes(path)) ? 'guide' : 'diff';
     setOpen(previous => ({ ...previous, [targetView]: [...new Set([...previous[targetView], path])] }));
-    if (view !== targetView) void navigate({ ...pullLink(repo, number, targetView), resetScroll: false });
+    if (view !== targetView) void navigate({ ...link(targetView), resetScroll: false });
     if (targetView === 'guide') {
       setFilePreview(path, false);
       const reference = guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path);
@@ -154,6 +158,11 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     if (isMobile) setOpenMobile(false);
     requestAnimationFrame(() => scrollToElement(fileAnchor(path), targetView === 'diff' ? topbar + toolbar + 16 : topbar + 16, targetView === 'guide'));
   }
+  // A link to one file (#file-…), such as a file's PR chip on a range, opens at that file.
+  useEffect(() => { const path = shown.find(file => `#${fileAnchor(file.path)}` === window.location.hash)?.path; if (path) pickFile(path); }, []);
+  // On a range, the PRs in it that changed each file, bottom first.
+  const touched = useMemo(() => new Map<string, RangePull[]>(range ? snapshot.files.map(file => [file.path, range.filter(pull => pull.files.includes(file.path) || (file.previousPath !== null && pull.files.includes(file.previousPath))).reverse()]) : []), [range, snapshot.files]);
+  const tags = useMemo(() => range ? new Map([...touched].map(([path, pulls]) => [path, pulls.length > 3 ? `${pulls.length} PRs` : pulls.map(pull => `#${pull.number}`).join(' ')])) : undefined, [touched]);
   const pull = { repo, number };
   const reviewApi = useMemo<ReviewApi>(() => ({
     viewer: detail.viewer, author: snapshot.author, threads: conversation.threads, drafts, composer, setComposer,
@@ -175,7 +184,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
     setFocus(`draft-${first.id}`);
     if (!shown.some(file => file.path === first.path)) hidden.setEnabled(false);
     setOpen(previous => ({ ...previous, diff: [...new Set([...previous.diff, first.path])] }));
-    if (view !== 'diff') void navigate({ ...pullLink(repo, number, 'diff'), resetScroll: false });
+    if (view !== 'diff') void navigate({ ...link('diff'), resetScroll: false });
     requestAnimationFrame(() => seekComment(`draft-${first.id}`, fileAnchor(first.path), topbar + toolbar + 16));
   };
   const changedFiles = shown.filter(file => contains(filter, file.path));
@@ -229,8 +238,8 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
   });
   const displayMenu = <DisplayMenu positionMethod={view === 'diff' ? 'fixed' : undefined} display={display} onChange={setDisplay} onReset={resetDisplay} onExpand={() => setOpen(previous => ({ ...previous, [diffView]: pageFiles }))} onCollapse={() => setOpen(previous => ({ ...previous, [diffView]: [] }))} />;
   const heading = <PullHeading snapshot={snapshot} />;
-  return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={reviewApi}>
-    <ReviewLayout navigation={navigation} repo={repo} number={number} title={snapshot.title} stack={detail.stack} view={view} analyzing={analyzing}
+  return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={range ? null : reviewApi}>
+    <ReviewLayout navigation={navigation} repo={repo} number={number} through={through} title={snapshot.title} stack={detail.stack} view={view} analyzing={analyzing}
       sidebarFooter={filteredCount > 0 && <Tip content={hidden.enabled ? 'Show them' : 'Hide them'} delay="long"><Button variant="ghost" size="xs" className="min-w-0 flex-1 justify-start text-muted-foreground" onClick={() => hidden.setEnabled(!hidden.enabled)}>{hidden.enabled ? <EyeOff /> : <Eye />}<span className="truncate">{filteredCount} filtered {filteredCount === 1 ? 'file' : 'files'} {hidden.enabled ? 'hidden' : 'visible'}</span></Button></Tip>}
       sidebar={
       <SidebarGroup ref={fileSidebar} className="file-tree min-h-0 flex-1" aria-label="Files">
@@ -238,14 +247,14 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
         <Tip content="Search files" hotkey="/" side="bottom"><SidebarGroupAction ref={filterButton} className="right-10" aria-label="Search files" aria-expanded={filterOpen} onClick={() => filterOpen ? closeFileSearch() : searchFiles()}><Search /></SidebarGroupAction></Tip>
         <FileDisplayMenu order={order} onOrder={setOrder} hidden={hidden} files={snapshot.files} trigger={<SidebarGroupAction aria-label="File list display" />} />
         {filterOpen && <div className="pb-2"><InputGroup className="bg-card"><InputGroupAddon><Search /></InputGroupAddon><InputGroupInput ref={filterInput} value={filter} onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); closeFileSearch(); } }} placeholder="Filter files" aria-label="Filter files" spellCheck={false} /><InputGroupAddon align="inline-end"><Kbd>/</Kbd></InputGroupAddon></InputGroup></div>}
-        {order === 'tree' ? <ChangedFileTree key={patterns.join('\n')} files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />
-          : <ChangedFileList files={shown} viewed={viewed} current={currentPath} search={filter} onPick={pickFile} />}
+        {order === 'tree' ? <ChangedFileTree key={patterns.join('\n')} files={shown} viewed={viewed} current={currentPath} search={filter} tags={tags} onPick={pickFile} />
+          : <ChangedFileList files={shown} viewed={viewed} current={currentPath} search={filter} tags={tags} onPick={pickFile} />}
         {!changedFiles.length && <p className="outline-empty">{filter ? `No files match “${filter}”.` : 'Every file is hidden.'}</p>}
       </SidebarGroup>
       }
-      actions={<ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />}
+      actions={!range && <ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />}
     >
-    {view === 'overview' ? <OverviewView detail={detail} heading={heading} onFile={pickFile} />
+    {view === 'overview' ? range ? <RangeOverview repo={repo} pulls={range} /> : <OverviewView detail={detail} heading={heading} onFile={pickFile} />
       : view === 'guide' ? <div className="guide-page">
         <div className="guide-head">
           {heading}
@@ -271,7 +280,7 @@ export function PullView({ detail, onDetail, view, navigation, status, analyzing
           <span className="toolbar-actions"><span className="toolbar-progress">{linesLeft.toLocaleString()} {linesLeft === 1 ? 'line' : 'lines'} left</span>{displayMenu}</span>
         </div>
         <div className="diff-body">
-          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} selectedLines={selected.diff?.path === file.path ? selected.diff.range : null} onSelectionChange={selectLines} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
+          <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} pulls={touched.get(file.path)} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} selectedLines={selected.diff?.path === file.path ? selected.diff.range : null} onSelectionChange={selectLines} preview={previewed.includes(file.path)} onPreview={setFilePreview} />)}</div>
         </div>
       </div>}
     {find.open && view !== 'overview' && <FindBar query={find.query} onQuery={query => setFind(previous => ({ ...previous, query, index: 0 }))} count={matches.length} current={findIndex} onStep={stepMatch}

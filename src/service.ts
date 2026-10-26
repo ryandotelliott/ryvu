@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { assertSnapshotBudget, cacheKey, MODEL, parsePR, UserError, validateGuide } from './domain.js';
-import { fetchSnapshot, generateGuide } from './adapters.js';
+import { fetchCompare, fetchSnapshot, generateGuide } from './adapters.js';
 import { fetchConversation, fetchStack, fetchStatus } from './github.js';
 import type { Store } from './store.js';
-import type { Conversation, Guide, JobView, PRIdentity, PullDetail, PullStack, PullStatus, Review, Snapshot } from './types.js';
-export type Dependencies = { fetch: (identity: PRIdentity, signal: AbortSignal) => Promise<Snapshot>; generate: (snapshot: Snapshot, signal: AbortSignal, ignored: readonly string[]) => Promise<Guide>; conversation: (identity: PRIdentity, signal: AbortSignal) => Promise<Conversation>; status: (identity: PRIdentity, signal: AbortSignal) => Promise<PullStatus>; stack: (identity: PRIdentity, signal: AbortSignal) => Promise<PullStack | null> };
+import type { ChangedFile, Conversation, Guide, JobView, PRIdentity, PullDetail, PullStack, PullStatus, RangePull, Review, Snapshot } from './types.js';
+export type Dependencies = { fetch: (identity: PRIdentity, signal: AbortSignal) => Promise<Snapshot>; generate: (snapshot: Snapshot, signal: AbortSignal, ignored: readonly string[]) => Promise<Guide>; conversation: (identity: PRIdentity, signal: AbortSignal) => Promise<Conversation>; status: (identity: PRIdentity, signal: AbortSignal) => Promise<PullStatus>; stack: (identity: PRIdentity, signal: AbortSignal) => Promise<PullStack | null>; compare: (identity: PRIdentity, base: string, head: string, signal: AbortSignal) => Promise<{ baseSHA: string; files: ChangedFile[] }> };
 export class ReviewService {
-  constructor(private store: Store, private deps: Dependencies = { fetch: fetchSnapshot, generate: generateGuide, conversation: fetchConversation, status: fetchStatus, stack: fetchStack }) {}
+  constructor(private store: Store, private deps: Dependencies = { fetch: fetchSnapshot, generate: generateGuide, conversation: fetchConversation, status: fetchStatus, stack: fetchStack, compare: fetchCompare }) {}
   // A stored guide for this head commit, if it still matches the current diff.
   cached(snapshot: Snapshot): Review | null {
     const review = this.store.guide(`${snapshot.identity.owner}/${snapshot.identity.repo}`, snapshot.identity.number, snapshot.headSHA);
@@ -18,7 +18,21 @@ export class ReviewService {
     // The status panel and the stack are optional, so their failure leaves the rest of the page readable.
     const [snapshot, conversation, login, status, stack] = await Promise.all([this.deps.fetch(identity, signal), this.deps.conversation(identity, signal), viewer.catch(() => ''), this.deps.status(identity, signal).catch(() => null), this.deps.stack(identity, signal).catch(() => null)]);
     const repo = `${identity.owner}/${identity.repo}`, guide = this.cached(snapshot);
-    return { snapshot, guide, prior: guide ? null : this.store.priorGuide(repo, identity.number, snapshot.headSHA), conversation, drafts: this.store.drafts(repo, identity.number), viewer: login, status, stack };
+    return { snapshot, guide, prior: guide ? null : this.store.priorGuide(repo, identity.number, snapshot.headSHA), conversation, drafts: this.store.drafts(repo, identity.number), viewer: login, status, stack, range: null };
+  }
+  // The PRs of one stack from this PR to `through`, read as one diff from the bottom PR's base to the top PR's head.
+  // The diff is shaped like the opened PR's snapshot so the Diff page reads it unchanged. Ranges have no guide or comments.
+  async range(identity: PRIdentity, through: number, viewer: Promise<string>, signal: AbortSignal): Promise<PullDetail> {
+    const stack = await this.deps.stack(identity, signal).catch(() => null);
+    const ends = [identity.number, through].map(number => stack?.pulls.findIndex(pull => pull.number === number) ?? -1);
+    if (!stack || ends.includes(-1)) throw new UserError(`#${through} isn’t in the same stack as #${identity.number}.`);
+    const pulls = stack.pulls.slice(Math.min(...ends), Math.max(...ends) + 1);
+    const [snapshots, login] = await Promise.all([Promise.all(pulls.map(pull => this.deps.fetch({ ...identity, number: pull.number, url: `https://github.com/${identity.owner}/${identity.repo}/pull/${pull.number}` }, signal))), viewer.catch(() => '')]);
+    const top = snapshots[0], bottom = snapshots[snapshots.length - 1];
+    const diff = await this.deps.compare(identity, bottom.baseSHA, top.headSHA, signal);
+    const snapshot: Snapshot = { ...top, identity, body: '', baseSHA: diff.baseSHA, baseRef: bottom.baseRef, files: diff.files, warnings: [], fetchedAt: new Date().toISOString() };
+    const range: RangePull[] = pulls.map((pull, i) => ({ ...pull, author: snapshots[i].author, body: snapshots[i].body, baseRef: snapshots[i].baseRef ?? '', headRef: snapshots[i].headRef ?? '', files: [...new Set(snapshots[i].files.flatMap(file => file.previousPath ? [file.path, file.previousPath] : [file.path]))] }));
+    return { snapshot, guide: null, prior: null, conversation: { threads: [], reviews: [], comments: [] }, drafts: [], viewer: login, status: null, stack, range };
   }
   // `requested` are paths the reviewer hid; they are left out of what the model sees and recorded on the guide.
   async review(input: unknown, signal: AbortSignal, update: (state: 'loading' | 'generating', message: string) => void, fresh = false, requested: readonly string[] = []): Promise<Review> {
