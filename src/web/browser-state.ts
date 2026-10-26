@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { listPullIndex } from '../inbox.functions';
-import type { IndexedPull, PullSummary } from '../types';
+import type { IndexedPull, PullStack, PullSummary } from '../types';
 
 // Pulls seen in lists, search and stacks, so the title can appear before the snapshot loads.
-export type KnownPull = Pick<PullSummary, 'repo' | 'number' | 'title'> & Partial<PullSummary>;
+export type KnownPull = Pick<PullSummary, 'repo' | 'number' | 'title'> & Partial<PullSummary> & { stack?: PullStack | null };
 const known = new Map<string, KnownPull>();
 export const pullKey = (repo: string, number: number) => `${repo.toLowerCase()}#${number}`;
 export function remember(pulls: KnownPull[]) { for (const pull of pulls) { const key = pullKey(pull.repo, pull.number); known.set(key, { ...known.get(key), ...pull }); } }

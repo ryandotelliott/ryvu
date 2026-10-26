@@ -9,6 +9,7 @@ export default async function (ctx) {
   const below = expected[expected.indexOf(Number(number)) + 1];
 
   await ctx.go(`/pr/${owner}/${repo}/${number}/diff`);
+  await page.locator('.pr-page:not([aria-busy])').waitFor({ timeout: 60_000 });
   const trigger = page.locator('.pr-topbar .stack-trigger');
   await trigger.waitFor({ timeout: 60_000 });
   ctx.check(await trigger.locator('.stack-icon').count() === 1 && (await trigger.innerText()).includes(`#${number}`), 'the top bar title shows the stack icon and this PR');

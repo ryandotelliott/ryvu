@@ -84,7 +84,7 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 - `navigation`: deep links to every view, the `/changes` alias, old `#/` links, unknown paths, in-app links and keys, back and forward.
 - `view-scroll` (needs `VERIFY_GUIDE_PR`): Overview, Guide and Diff keep separate scroll positions across tabs, keyboard navigation, Back and Forward; an explicit sidebar file jump overrides the saved position.
 - `stack` (optional `VERIFY_STACK_PR`): stack order, current PR, diff stats, keyboard navigation and switching PRs without changing view.
-- `stack-loading` (optional `VERIFY_STACK_PR`): a stack member's known title stays visible while its details load. In dev, it also seeds an older browser-cache title and checks that fresh GitHub data replaces it.
+- `stack-loading` (optional `VERIFY_STACK_PR`): a stack member's known title and stack switcher stay available while its details load. In dev, it also seeds an older browser-cache title and checks that fresh GitHub data replaces it.
 - `persistence`: a settings change and a pending comment survive a reload. The comment is local until Submit review, which it never clicks.
 - `security`: raw requests with a foreign Host or Origin, a cross-site fetch, no session token, no CSRF headers, or an oversized or non-JSON body. It replays the page's own server-function requests.
 - `lifecycle` (needs `VERIFY_STUB_CODEX=1` and `VERIFY_GUIDE_PR`): `?analyze=1`, Cancel, a job that outlives navigation, and a shutdown that waits for the job's child process. It stops the server with SIGINT in dev and SIGTERM in production. `VERIFY_SIGNAL=SIGHUP` (or `SIGINT`, `SIGTERM`) sends that signal instead. Run `cleanup.sh` after it.

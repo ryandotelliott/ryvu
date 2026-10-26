@@ -42,7 +42,7 @@ export function PullSkeleton({ target, pull, navigation }: { target: PullTarget;
     <SidebarGroupAction aria-label="File list display" disabled><SlidersHorizontal /></SidebarGroupAction>
     <div className="overflow-hidden" aria-hidden="true">{['w-28', 'w-36', 'w-24', 'w-32', 'w-40', 'w-28', 'w-36', 'w-24'].map((width, index) => <div key={index} className="list-file"><Skeleton className="size-3.5" /><Skeleton className={`h-3 max-w-full ${width}`} /></div>)}</div>
   </SidebarGroup>;
-  return <ReviewLayout navigation={navigation} repo={target.repo} number={target.number} title={pull?.title} view={target.view} sidebar={files} loading
+  return <ReviewLayout navigation={navigation} repo={target.repo} number={target.number} title={pull?.title} stack={pull?.stack} view={target.view} sidebar={files} loading
     actions={<Button size="sm" disabled>Review<ChevronDown size={12} /></Button>}
   >
     {target.view === 'overview' ? <div className="overview-layout">

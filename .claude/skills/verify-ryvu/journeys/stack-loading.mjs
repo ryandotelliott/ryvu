@@ -4,9 +4,12 @@ export default async function (ctx) {
   const [owner, repo, number] = (process.env.VERIFY_STACK_PR ?? 'ryvn-technologies/ryvn/9508').split('/');
   const base = `/pr/${owner}/${repo}`;
   await ctx.go(`${base}/${number}/diff`);
+  await page.locator('.pr-page:not([aria-busy])').waitFor({ timeout: 60_000 });
   const trigger = page.locator('.pr-topbar .stack-trigger');
   await trigger.waitFor({ timeout: 60_000 });
   await trigger.click();
+  await page.locator('.stack-row').first().waitFor();
+  const stackCount = await page.locator('.stack-row').count();
   const next = page.locator('.stack-row:not([aria-current=page])').first();
   const path = await next.getAttribute('href');
   const cachedTitle = await next.locator('.stack-title').innerText();
@@ -40,7 +43,13 @@ export default async function (ctx) {
     const title = page.locator('.pr-topbar .topbar-title');
     ctx.check((await title.innerText()).includes(loadingTitle), 'while the PR response is held, the header shows its cached title');
     ctx.check(await title.locator('[data-slot=skeleton]').count() === 0, 'the known title does not flash a skeleton');
+    ctx.check(await trigger.count() === 1 && await trigger.locator('.stack-icon').count() === 1, 'the stack icon and switcher stay visible while the PR loads');
+    await trigger.click();
+    await page.locator('.stack-row').first().waitFor();
+    ctx.check(await page.locator('.stack-row').count() === stackCount, 'the cached stack menu can still be opened while loading');
+    ctx.check(await page.locator('.stack-row[aria-current=page]').getAttribute('href') === path, 'the pending PR is marked current in the cached stack menu');
     await ctx.shot('cached-stack-title');
+    await page.keyboard.press('Escape');
     release();
     await page.locator('.pr-page:not([aria-busy])').waitFor({ timeout: 60_000 });
     const fresh = ctx.github(`repos/${owner}/${repo}/pulls/${path.split('/').at(-2)}`);
