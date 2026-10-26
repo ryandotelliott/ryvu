@@ -4,7 +4,7 @@
 
 ## Sub-features
 
-- `find-open` opens the bar with the input focused and uses selected text as the query. With no selection, it keeps the previous query; ⌘F again reselects the text.
+- `find-open` opens the bar with the input focused and uses selected text as the query. With no new page selection, it keeps the previous query and current match. ⌘F inside the search bar only refocuses and selects its query.
 - `find-count` shows `i of n` for the query.
 - `find-collapsed` always includes collapsed files and opens a matching file when jumping to it.
 - `find-step` moves with Enter / Shift+Enter or ⌘G / ⇧⌘G, centring the match.

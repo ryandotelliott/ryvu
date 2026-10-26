@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { listPullIndex } from '../inbox.functions';
 import type { IndexedPull, PullSummary } from '../types';
 
-// Pulls seen in lists and search, so the guide view can show a title before the snapshot loads.
-// Palette entries carry only the basics; lists and lookups fill in the rest.
-export type KnownPull = IndexedPull & Partial<PullSummary>;
+// Pulls seen in lists, search and stacks, so the title can appear before the snapshot loads.
+export type KnownPull = Pick<PullSummary, 'repo' | 'number' | 'title'> & Partial<PullSummary>;
 const known = new Map<string, KnownPull>();
 export const pullKey = (repo: string, number: number) => `${repo.toLowerCase()}#${number}`;
 export function remember(pulls: KnownPull[]) { for (const pull of pulls) { const key = pullKey(pull.repo, pull.number); known.set(key, { ...known.get(key), ...pull }); } }

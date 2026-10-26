@@ -6,8 +6,6 @@ import { pullLink, type PullViewName } from './links';
 import { PullIcon, Tip } from './ui';
 import type { PullStack, StackedPull } from '../types';
 
-const checkLabels = { success: 'Checks passed', failure: 'Checks failing', pending: 'Checks running' } as const;
-
 // The top bar's title for a stacked PR. It opens the stack, top first, so you can step to the PRs above and below this one.
 export function StackMenu({ repo, number, title, stack, view }: { repo: string; number: number; title: string; stack: PullStack; view: PullViewName }) {
   const position = stack.pulls.length - stack.pulls.findIndex(pull => pull.number === number);
@@ -31,7 +29,6 @@ function StackRow({ pull, current, repo, view }: { pull: StackedPull; current: b
   return <Menu.LinkItem closeOnClick label={`#${pull.number} ${pull.title}`} className="stack-row" aria-current={current ? 'page' : undefined} render={<Link {...pullLink(repo, pull.number, view)} />}>
     <span className="stack-status">
       <PullIcon draft={pull.draft} state={pull.state} size={15} />
-      {pull.checks && <span className={`stack-checks ${pull.checks}`} role="img" aria-label={checkLabels[pull.checks]} />}
     </span>
     <span className="topbar-number">#{pull.number}</span>
     <span className="stack-title">{pull.title}</span>

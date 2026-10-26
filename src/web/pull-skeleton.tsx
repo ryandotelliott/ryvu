@@ -31,7 +31,7 @@ export function PullSkeleton({ target, pull, navigation }: { target: PullTarget;
     {pull?.title ? <h1>{pull.title}</h1> : <Skeleton className="pr-heading-skeleton w-2/3" />}
     <div className="review-meta">
       {pull?.state && pull.state !== 'open' ? <span className={`state-chip ${pull.state}`}>{pull.state === 'merged' ? 'Merged' : 'Closed'}</span> : pull?.isDraft ? <span className="state-chip draft">Draft</span> : null}
-      {pull ? <><Avatar login={pull.author} size={18} /><span className="author">{pull.author}</span></> : <><Skeleton className="size-[18px] rounded-full" /><Skeleton className="h-3 w-20" /></>}
+      {pull?.author ? <><Avatar login={pull.author} size={18} /><span className="author">{pull.author}</span></> : <><Skeleton className="size-[18px] rounded-full" /><Skeleton className="h-3 w-20" /></>}
       <span className="meta-separator">·</span><span className="meta-repo">{target.repo} #{target.number}</span>
       {pull?.branch && <><span className="meta-separator">·</span><span className="branches"><Skeleton className="h-[18.5px] w-9" />←<code>{pull.branch}</code></span></>}
     </div>

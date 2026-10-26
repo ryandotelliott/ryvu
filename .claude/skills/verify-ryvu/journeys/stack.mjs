@@ -24,7 +24,7 @@ export default async function (ctx) {
   const current = page.locator('.stack-row[aria-current="page"]');
   ctx.check(await current.count() === 1 && (await current.innerText()).includes(`#${number}`), 'only this PR is marked current');
   ctx.check(await rows.locator('.stack-diff .added').count() === expected.length, 'every row shows its diff stats');
-  ctx.check(await page.locator('.stack-menu .stack-checks').count() > 0, `rows show check dots (${await page.locator('.stack-menu .stack-checks').count()})`);
+  ctx.check(await page.locator('.stack-menu .stack-checks').count() === 0, 'the stack rows have no checks-status dots');
   ctx.check(await page.locator('.stack-base code').innerText() === stack.base.ref, `the base branch ${stack.base.ref} sits below the stack`);
   await ctx.shot('stack-menu');
 
