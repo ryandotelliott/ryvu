@@ -17,16 +17,18 @@ export default async function (ctx) {
   const path = () => { const url = new URL(page.url()); return url.pathname + url.search; };
   const anchorId = file => `file-${encodeURIComponent(file).replace(/%/g, '_')}`;
   const trigger = page.locator('.pr-topbar .stack-trigger');
+  const loaded = () => page.waitForSelector('.pr-page:not([aria-busy]) .view-tabs', { timeout: 120_000 });
   const openMenu = async () => {
     await trigger.click();
     await page.locator('.stack-menu .stack-row').first().waitFor();
     await page.locator('.stack-menu').evaluate(menu => Promise.all(menu.getAnimations().map(animation => animation.finished)));
   };
   const row = n => page.locator('.stack-menu .stack-line', { has: page.locator(`.stack-row[href^="/pr/${owner}/${repo}/${n}/"], .stack-row[href="/pr/${owner}/${repo}/${n}"]`) });
-  const loaded = () => page.waitForSelector('.pr-page:not([aria-busy]) .view-tabs', { timeout: 120_000 });
 
   // Picking the other end in the menu
   await ctx.go(`${base}/diff`);
+  // The loading page can show the stack switcher too; the loaded page replaces it, closing a menu opened early.
+  await loaded();
   await trigger.waitFor({ timeout: 60_000 });
   await openMenu();
   ctx.check(await page.locator('.stack-label span').first().innerText() === `${order.length} stacked` && (await page.locator('.stack-label').innerText()).includes(`Click a dot to review with #${number}`), 'the menu explains that a dot picks the other end');

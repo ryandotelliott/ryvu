@@ -9,7 +9,6 @@ import { rangeLabel } from './pull-page';
 import { PullIcon, Tip } from './ui';
 import type { PullStack, StackedPull } from '../types';
 
-const checkLabels = { success: 'Checks passed', failure: 'Checks failing', pending: 'Checks running' } as const;
 type Span = 'top' | 'middle' | 'bottom';
 
 // The top bar's title for a stacked PR, or for a range of PRs in one stack. It opens the stack, top first, so you can step to
@@ -55,7 +54,6 @@ function StackRow({ pull, repo, view, anchor, current, span, last, onPick, onRan
       onClick={event => { if (event.shiftKey && !anchor) { event.preventDefault(); onRange(); } }}>
       <span className="stack-status">
         <PullIcon draft={pull.draft} state={pull.state} size={15} />
-        {pull.checks && <span className={`stack-checks ${pull.checks}`} role="img" aria-label={checkLabels[pull.checks]} />}
       </span>
       <span className="topbar-number">#{pull.number}</span>
       <span className={`stack-title ${anchor ? 'is-anchor' : ''}`}>{pull.title}</span>

@@ -90,6 +90,7 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
   });
   const [filter, setFilter] = useState(''), [filterOpen, setFilterOpen] = useState(false), [current, setCurrent] = useState(0);
   const [find, setFind] = useState({ open: false, query: '', index: 0, focus: 0 });
+  const lastFindQuery = useRef('');
   const [previewed, setPreviewed] = useState<string[]>([]);
   const setFilePreview = useCallback((path: string, preview: boolean) => setPreviewed(previous => preview ? [...new Set([...previous, path])] : previous.filter(value => value !== path)), []);
   const [selected, setSelected] = useState<Record<DiffView, LineSelection | null>>({ diff: null, guide: null }), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
@@ -148,7 +149,7 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
   function pickFile(path: string) {
     const targetView = view === 'guide' && chapters.some(chapter => chapter.files.includes(path)) ? 'guide' : 'diff';
     setOpen(previous => ({ ...previous, [targetView]: [...new Set([...previous[targetView], path])] }));
-    if (view !== targetView) void navigate(link(targetView));
+    if (view !== targetView) void navigate({ ...link(targetView), resetScroll: false });
     if (targetView === 'guide') {
       setFilePreview(path, false);
       const reference = guide?.chapters.flatMap(chapter => chapter.references).find(ref => ref.path === path);
@@ -183,7 +184,7 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
     setFocus(`draft-${first.id}`);
     if (!shown.some(file => file.path === first.path)) hidden.setEnabled(false);
     setOpen(previous => ({ ...previous, diff: [...new Set([...previous.diff, first.path])] }));
-    if (view !== 'diff') void navigate(link('diff'));
+    if (view !== 'diff') void navigate({ ...link('diff'), resetScroll: false });
     requestAnimationFrame(() => seekComment(`draft-${first.id}`, fileAnchor(first.path), topbar + toolbar + 16));
   };
   const changedFiles = shown.filter(file => contains(filter, file.path));
@@ -210,7 +211,9 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
   const stepMatch = (direction: 1 | -1) => { if (matches.length) goToMatch((findIndex + direction + matches.length) % matches.length); };
   // Typing jumps to the first match in or after the file you're reading.
   useEffect(() => {
-    if (!find.open || !find.query || !matches.length) return;
+    const changed = lastFindQuery.current !== find.query;
+    lastFindQuery.current = find.query;
+    if (!changed || !find.open || !find.query || !matches.length) return;
     const timer = setTimeout(() => { const from = pageFiles.indexOf(currentPath ?? ''); const index = matches.findIndex(match => pageFiles.indexOf(match.path) >= from); goToMatch(Math.max(0, index)); }, 150);
     return () => clearTimeout(timer);
   }, [find.query, find.open]);
@@ -221,10 +224,13 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
       if (key === 'f') {
         event.preventDefault();
         const field = document.activeElement;
-        const selection = (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== null && field.selectionEnd !== null
+        const selection = field?.closest('.find-bar') ? '' : (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) && field.selectionStart !== null && field.selectionEnd !== null
           ? field.value.slice(field.selectionStart, field.selectionEnd)
           : window.getSelection()?.toString() ?? '';
-        setFind(previous => ({ ...previous, open: true, query: selection || previous.query, index: selection ? 0 : previous.index, focus: previous.focus + 1 }));
+        setFind(previous => {
+          const query = selection || previous.query;
+          return { ...previous, open: true, query, index: query === previous.query ? previous.index : 0, focus: previous.focus + 1 };
+        });
       }
       else if (key === 'g' && find.open) { event.preventDefault(); stepMatch(event.shiftKey ? -1 : 1); }
     }

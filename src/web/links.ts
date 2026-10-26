@@ -27,5 +27,5 @@ export const homeLink = (filters: PullFilters = {}) => linkOptions({ to: '/', se
 export const settingsLink = linkOptions({ to: '/settings', ...stay });
 export function pullLink(repo: string, number: number, view: PullViewName = 'overview', { analyze = false, through = null }: { analyze?: boolean; through?: number | null } = {}) {
   const [owner, name] = repo.split('/');
-  return linkOptions({ to: '/pr/$owner/$repo/$number/{-$view}', params: { owner, repo: name, number: String(number), view: view === 'overview' ? undefined : view }, search: { ...(analyze ? { analyze: 1 as const } : {}), ...(through ? { through } : {}) }, ...stay });
+  return linkOptions({ to: '/pr/$owner/$repo/$number/{-$view}', params: { owner, repo: name, number: String(number), view: view === 'overview' ? undefined : view }, search: { ...(analyze ? { analyze: 1 as const } : {}), ...(through ? { through } : {}) }, ...stay, resetScroll: true });
 }

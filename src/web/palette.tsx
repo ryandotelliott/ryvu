@@ -84,7 +84,7 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
       return [{ label: isLink ? <><Link2 size={12} />Recognized pull request link</> : <>Pull request #{number}</>, items, note }];
     }
     const scored = (pulls ?? []).flatMap(pull => {
-      const match = fuzzy(trimmed, [pull.title, `${pull.repo}#${pull.number}`, pull.author], [1, 0.9, 0.7]);
+      const match = fuzzy(trimmed, [pull.title, `${pull.repo}#${pull.number}`, pull.author ?? ''], [1, 0.9, 0.7]);
       return match ? [{ pull, match }] : [];
     }).sort((a, b) => b.match.score - a.match.score);
     // GitHub matches words anywhere in the title, so keep its results even when the local fuzzy match is stricter.
@@ -115,7 +115,7 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
               <span className="palette-icon"><PullIcon draft={item.pull.isDraft} state={item.pull.state} size={16} /></span>
               <span className="palette-text">
                 <span className="palette-title"><Highlighted runs={segments(item.pull.title, item.title)} /></span>
-                <span className="palette-meta">{item.pull.repo} #{item.pull.number} · {item.pull.author}{item.pull.state && item.pull.state !== 'open' ? ` · ${item.pull.state}` : item.pull.isDraft ? ' · draft' : ''}{item.pull.reviewRequested ? ' · review requested' : ''}</span>
+                <span className="palette-meta">{item.pull.repo} #{item.pull.number}{item.pull.author && ` · ${item.pull.author}`}{item.pull.state && item.pull.state !== 'open' ? ` · ${item.pull.state}` : item.pull.isDraft ? ' · draft' : ''}{item.pull.reviewRequested ? ' · review requested' : ''}</span>
               </span>
               <span className="palette-hint">Open<Kbd><CornerDownLeft /></Kbd></span>
             </> : item.kind === 'goto' ? <>

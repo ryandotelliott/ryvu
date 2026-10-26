@@ -7,6 +7,26 @@ export default async function (ctx) {
     const box = range.getBoundingClientRect();
     return box.top > 108 && box.bottom < innerHeight ? { text: range.toString(), top: Math.round(box.top) } : false;
   }, term)).jsonValue();
+  async function checkReopen(term, label) {
+    const input = page.getByLabel('Find in diff');
+    const count = await page.locator('.find-count').innerText();
+    ctx.check(Number(count.split(' of ')[1]) > 1, `${label}: the query has multiple matches`);
+    if (count.startsWith('1 of ')) {
+      await input.press('Enter');
+      await page.waitForFunction(() => !document.querySelector('.find-count').textContent.startsWith('1 of '));
+      await currentHighlight(term);
+    }
+    const matchBeforeReopen = await page.locator('.find-count').innerText();
+    await input.evaluate(el => el.setSelectionRange(0, Math.min(4, el.value.length)));
+    await input.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+    await page.waitForTimeout(250);
+    ctx.check(await input.inputValue() === term && await page.locator('.find-count').innerText() === matchBeforeReopen, `${label}: ⌘F while find is focused preserves the query and current match`);
+    await input.press('Escape');
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+    await page.waitForTimeout(250);
+    ctx.check(await page.locator('.find-count').innerText() === matchBeforeReopen, `${label}: closing and reopening the unchanged search preserves the current match`);
+  }
   async function checkSelectedCode(previousQuery, label) {
     const selected = await page.evaluate(previousQuery => {
       for (const container of document.querySelectorAll('.diff-card.expanded diffs-container')) {
@@ -66,6 +86,8 @@ export default async function (ctx) {
   ctx.check(await page.locator('.diff-card.expanded').count() > 0, 'jumping to a result opens its collapsed file automatically');
   await ctx.shot('match');
 
+  await checkReopen(term, 'Diff');
+
   await input.press('Escape'); await page.waitForTimeout(300);
   ctx.check(await page.locator('.find-bar').count() === 0, 'Esc closes the find bar');
   await checkSelectedCode(term, 'Diff');
@@ -88,6 +110,7 @@ export default async function (ctx) {
   await input.fill(guideTerm);
   await currentHighlight(guideTerm);
   ctx.check(await page.locator('.diff-card.expanded').count() > 0, 'Guide find also opens matching collapsed code blocks');
+  await checkReopen(guideTerm, 'Guide');
   for (const width of [1440, 640]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => scrollTo(0, 0));

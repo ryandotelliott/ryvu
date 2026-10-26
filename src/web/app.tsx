@@ -7,7 +7,7 @@ import { cancelAnalysis, getAnalysis, startAnalysis } from '../jobs.functions';
 import { getPull, getRange } from '../pull.functions';
 import { setSessionToken } from '../session';
 import { AppContext, useApplication } from './application-context';
-import { recall } from './browser-state';
+import { recall, remember } from './browser-state';
 import { hiddenPaths } from './file-filters';
 import { InboxCache } from './inbox-cache';
 import { homeLink, pullLink, type PullTarget } from './links';
@@ -46,6 +46,11 @@ function useAppState() {
     try {
       const detail = next.through ? await getRange({ data: { repo: next.repo, number: next.number, through: next.through } }) : await getPull({ data: { repo: next.repo, number: next.number } });
       if (version === loadSequence.current) {
+        remember([
+          ...(detail.stack?.pulls ?? []).map(pull => ({ repo: next.repo, number: pull.number, title: pull.title, state: pull.state, isDraft: pull.draft, additions: pull.additions, deletions: pull.deletions, stack: detail.stack })),
+          // A range's snapshot is the combined diff, not this PR's, so only the stack rows describe its PRs.
+          ...(detail.range ? [] : [{ repo: next.repo, number: next.number, title: detail.snapshot.title, author: detail.snapshot.author, state: detail.snapshot.state, isDraft: detail.snapshot.draft, stack: detail.stack }])
+        ]);
         setPulls(current => ({ ...current, [next.key]: current[next.key] === previous ? detail : current[next.key] }));
         setConfirmedPull({ key: next.key, version });
       }

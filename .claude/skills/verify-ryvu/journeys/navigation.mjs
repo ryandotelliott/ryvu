@@ -1,5 +1,7 @@
 export default async function (ctx) {
   const { page } = ctx;
+  page.setDefaultTimeout(15_000);
+  page.setDefaultNavigationTimeout(60_000);
   const pulls = await ctx.inbox();
   ctx.check(pulls.length > 0, `the inbox lists pull requests (${pulls.length})`);
   const pull = pulls[0], base = pull.path;
@@ -29,8 +31,8 @@ export default async function (ctx) {
   await page.evaluate(() => { window.__verifyMarker = 'kept'; });
   const kept = () => page.evaluate(() => window.__verifyMarker === 'kept');
   await page.locator('nav.tabs a', { hasText: 'Review requested' }).click();
-  await page.waitForURL(/\?tab=review$/);
-  ctx.check(path() === '/?tab=review' && await page.locator('nav.tabs a[aria-current="page"]').innerText().then(text => text.startsWith('Review requested')), 'the Review requested tab link sets ?tab=review and marks itself current');
+  await page.waitForURL(url => url.pathname === '/' && url.searchParams.get('tab') === 'review');
+  ctx.check(new URL(page.url()).searchParams.get('sort') === 'updated' && await page.locator('nav.tabs a[aria-current="page"]').innerText().then(text => text.startsWith('Review requested')), 'the Review requested tab link sets tab=review, preserves the sort and marks itself current');
   await page.goBack(); await page.waitForURL(url => new URL(url).search === '');
   ctx.check(await page.locator('nav.tabs a[aria-current="page"]').innerText().then(text => text.startsWith('All open')), 'back returns to All open');
 

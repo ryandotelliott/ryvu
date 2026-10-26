@@ -9,6 +9,7 @@ export default async function (ctx) {
   const below = expected[expected.indexOf(Number(number)) + 1];
 
   await ctx.go(`/pr/${owner}/${repo}/${number}/diff`);
+  await page.locator('.pr-page:not([aria-busy])').waitFor({ timeout: 60_000 });
   const trigger = page.locator('.pr-topbar .stack-trigger');
   await trigger.waitFor({ timeout: 60_000 });
   ctx.check(await trigger.locator('.stack-icon').count() === 1 && (await trigger.innerText()).includes(`#${number}`), 'the top bar title shows the stack icon and this PR');
@@ -24,7 +25,7 @@ export default async function (ctx) {
   const current = page.locator('.stack-row[aria-current="page"]');
   ctx.check(await current.count() === 1 && (await current.innerText()).includes(`#${number}`), 'only this PR is marked current');
   ctx.check(await rows.locator('.stack-diff .added').count() === expected.length, 'every row shows its diff stats');
-  ctx.check(await page.locator('.stack-menu .stack-checks').count() > 0, `rows show check dots (${await page.locator('.stack-menu .stack-checks').count()})`);
+  ctx.check(await page.locator('.stack-menu .stack-checks').count() === 0, 'the stack rows have no checks-status dots');
   ctx.check(await page.locator('.stack-base code').innerText() === stack.base.ref, `the base branch ${stack.base.ref} sits below the stack`);
   await ctx.shot('stack-menu');
 
