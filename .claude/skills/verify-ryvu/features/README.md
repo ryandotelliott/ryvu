@@ -36,6 +36,7 @@ Each file starts with an H1 and a paragraph describing the user-visible behaviou
 - [Find in diff](./find-in-diff.md) (`journeys/find.mjs`, `journeys/find-expanded.mjs`): ⌘F search, collapsed files, match highlighting, and direct jumps past expanded context.
 - [Comments](./comments.md) (`journeys/comments.mjs`): inline threads, indicator popovers, and display modes.
 - [Guide](./guide.md) (`journeys/guide.mjs`): saved walkthroughs, file chips, section navigation.
+- [Files](./files.md) (`journeys/files.mjs`): the file header menu, whole files at any branch with marked changes, the branch picker, the changed-only filter, and comments on whole files.
 
 Cross-cutting journeys without a feature file: `loading` (placeholder geometry and cached revisits), `stack` (stack navigation), `stack-loading` (cached titles while switching PRs and stale-title replacement), `tooltip-layout` (single-line control labels, wrapped file paths and viewport fitting), `scrolling` (popovers on sticky controls and independent sidebar scrolling), `navigation` (routes, links, history), `view-scroll` (separate scroll positions for Overview, Guide and Diff), `persistence` (a settings change and a pending comment across a reload), `security` (the local request rules), `lifecycle` and `dev-reload` (analysis jobs, shutdown and dev reloads, with the stand-in Codex). `SKILL.md` lists their preconditions.
 

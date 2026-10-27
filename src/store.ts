@@ -6,8 +6,9 @@ import { MODEL, PROMPT_VERSION, UserError } from './domain.js';
 import type { DiffSide, DraftComment, PriorGuide, Review } from './types.js';
 
 type GuideRow = { review: string };
+// A comment on the whole file is stored with line 0, since the column predates file comments and can't be null.
 type DraftRow = { id: string; path: string; side: string; start_line: number | null; line: number; body: string; head_sha: string; created_at: string };
-const draftFromRow = (row: DraftRow): DraftComment => ({ id: row.id, path: row.path, side: row.side === 'deletions' ? 'deletions' : 'additions', startLine: row.start_line, line: row.line, body: row.body, headSHA: row.head_sha, createdAt: row.created_at });
+const draftFromRow = (row: DraftRow): DraftComment => ({ id: row.id, path: row.path, side: row.side === 'deletions' ? 'deletions' : 'additions', startLine: row.start_line, line: row.line || null, body: row.body, headSHA: row.head_sha, createdAt: row.created_at });
 
 // Local SQLite store for analyzed guides (keyed by head commit) and pending review comments.
 export class Store {
@@ -68,10 +69,10 @@ export class Store {
   drafts(repo: string, number: number): DraftComment[] {
     return (this.db.prepare('SELECT id, path, side, start_line, line, body, head_sha, created_at FROM drafts WHERE repo = ? AND number = ? ORDER BY created_at').all(repo.toLowerCase(), number) as DraftRow[]).map(draftFromRow);
   }
-  addDraft(repo: string, number: number, draft: { headSHA: string; path: string; side: DiffSide; startLine: number | null; line: number; body: string }): DraftComment {
+  addDraft(repo: string, number: number, draft: { headSHA: string; path: string; side: DiffSide; startLine: number | null; line: number | null; body: string }): DraftComment {
     const id = randomUUID(), now = new Date().toISOString();
     this.db.prepare('INSERT INTO drafts (id, repo, number, head_sha, path, side, start_line, line, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, repo.toLowerCase(), number, draft.headSHA, draft.path, draft.side, draft.startLine, draft.line, draft.body, now, now);
+      .run(id, repo.toLowerCase(), number, draft.headSHA, draft.path, draft.side, draft.startLine, draft.line ?? 0, draft.body, now, now);
     return { id, ...draft, createdAt: now };
   }
   updateDraft(id: string, body: string): DraftComment {

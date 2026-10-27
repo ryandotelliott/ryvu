@@ -1,6 +1,6 @@
 import { UserError } from './domain.js';
 import { runCommand, type Runner } from './process.js';
-import type { CommentThread, Conversation, DiffSide, DraftComment, PRIdentity, PullStack, PullStatus, ReviewComment, ReviewEvent, ReviewSummary } from './types.js';
+import type { Branch, BranchList, CommentThread, Conversation, DiffSide, DraftComment, PRIdentity, PullStack, PullStatus, RepoTree, ReviewComment, ReviewEvent, ReviewSummary } from './types.js';
 
 const MAX_BODY = 65_536;
 // GitHub explains rejected writes in a JSON body; surface that instead of a generic failure.
@@ -37,7 +37,9 @@ export async function fetchConversation(identity: PRIdentity, signal: AbortSigna
   const [inline, reviews, issue, resolved] = await Promise.all([pages(`${route(identity)}/pulls/${identity.number}/comments`), pages(`${route(identity)}/pulls/${identity.number}/reviews`), pages(`${route(identity)}/issues/${identity.number}/comments`), resolvedThreads(identity, signal, runner).catch(() => new Set<number>())]);
   const threads = new Map<number, CommentThread>();
   for (const raw of inline.filter(item => !item.in_reply_to_id)) {
-    threads.set(Number(raw.id), { id: Number(raw.id), path: String(raw.path ?? ''), side: side(raw.side), line: Number.isInteger(raw.line) ? raw.line : null, startLine: Number.isInteger(raw.start_line) ? raw.start_line : null, originalLine: Number.isInteger(raw.original_line) ? raw.original_line : null, outdated: !Number.isInteger(raw.line), resolved: resolved.has(Number(raw.id)), comments: [comment(raw)] });
+    // A comment on the whole file has no line, and isn't outdated for it.
+    const subject = raw.subject_type === 'file' ? 'file' : 'line';
+    threads.set(Number(raw.id), { id: Number(raw.id), path: String(raw.path ?? ''), subject, side: side(raw.side), line: Number.isInteger(raw.line) ? raw.line : null, startLine: Number.isInteger(raw.start_line) ? raw.start_line : null, originalLine: Number.isInteger(raw.original_line) ? raw.original_line : null, outdated: subject === 'line' && !Number.isInteger(raw.line), resolved: resolved.has(Number(raw.id)), comments: [comment(raw)] });
   }
   for (const raw of inline.filter(item => item.in_reply_to_id).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) threads.get(Number(raw.in_reply_to_id))?.comments.push(comment(raw));
   const states = ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED', 'DISMISSED'];
@@ -80,16 +82,28 @@ export async function fetchStack(identity: PRIdentity, signal: AbortSignal, runn
   return { base: String(stack?.base?.ref ?? ''), pulls: pulls.reverse() };
 }
 
+const FILE_THREAD = 'mutation($review: ID!, $path: String!, $body: String!) { addPullRequestReviewThread(input: { pullRequestReviewId: $review, path: $path, body: $body, subjectType: FILE }) { thread { id } } }';
 export async function submitReview(identity: PRIdentity, headSHA: string, event: ReviewEvent, body: string, drafts: DraftComment[], runner: Runner = runCommand): Promise<void> {
   if (!['COMMENT', 'APPROVE', 'REQUEST_CHANGES'].includes(event)) throw new UserError('Choose comment, approve or request changes.', 400);
   if (body.length > MAX_BODY) throw new UserError('The review summary is too long.', 400);
   if (event === 'REQUEST_CHANGES' && !body.trim()) throw new UserError('Add a summary explaining the changes you’re requesting.', 400);
   if (event === 'COMMENT' && !body.trim() && !drafts.length) throw new UserError('Add a comment or a summary before submitting.', 400);
-  const payload = {
-    commit_id: headSHA, event, body,
-    comments: drafts.map(draft => ({ path: draft.path, body: draft.body, line: draft.line, side: draft.side === 'deletions' ? 'LEFT' : 'RIGHT', ...(draft.startLine && draft.startLine < draft.line ? { start_line: draft.startLine, start_side: draft.side === 'deletions' ? 'LEFT' : 'RIGHT' } : {}) }))
-  };
-  await runner('gh', ['api', '--method', 'POST', `${route(identity)}/pulls/${identity.number}/reviews`, '--input', '-'], { signal: new AbortController().signal, input: JSON.stringify(payload), failureDetail: githubError('submit the review') });
+  const reviews = `${route(identity)}/pulls/${identity.number}/reviews`, signal = new AbortController().signal, failureDetail = githubError('submit the review');
+  const comments = drafts.flatMap(draft => draft.line === null ? [] : [{ path: draft.path, body: draft.body, line: draft.line, side: draft.side === 'deletions' ? 'LEFT' : 'RIGHT', ...(draft.startLine && draft.startLine < draft.line ? { start_line: draft.startLine, start_side: draft.side === 'deletions' ? 'LEFT' : 'RIGHT' } : {}) }]);
+  const files = drafts.filter(draft => draft.line === null);
+  if (!files.length) { await runner('gh', ['api', '--method', 'POST', reviews, '--input', '-'], { signal, input: JSON.stringify({ commit_id: headSHA, event, body, comments }), failureDetail }); return; }
+  // The REST review endpoint only takes line comments. Comments on whole files are added to a pending review through GraphQL, then
+  // the review is submitted. If any step fails, the pending review is deleted so nothing is left half-posted.
+  const pending = JSON.parse(await runner('gh', ['api', '--method', 'POST', reviews, '--input', '-'], { signal, input: JSON.stringify({ commit_id: headSHA, comments }), failureDetail }));
+  const id = Number(pending?.id), nodeId = String(pending?.node_id ?? '');
+  if (!Number.isSafeInteger(id) || !nodeId) throw new UserError('GitHub did not return the new review.');
+  try {
+    for (const draft of files) await runner('gh', ['api', 'graphql', '-f', `query=${FILE_THREAD}`, '-f', `review=${nodeId}`, '-f', `path=${draft.path}`, '-f', `body=${draft.body}`], { signal, failureDetail: githubError(`comment on ${draft.path}`) });
+    await runner('gh', ['api', '--method', 'POST', `${reviews}/${id}/events`, '--input', '-'], { signal, input: JSON.stringify({ event, body }), failureDetail });
+  } catch (error) {
+    await runner('gh', ['api', '--method', 'DELETE', `${reviews}/${id}`], { signal }).catch(() => {});
+    throw error;
+  }
 }
 
 export async function replyToThread(identity: PRIdentity, commentId: number, body: string, runner: Runner = runCommand): Promise<void> {
@@ -109,4 +123,32 @@ export async function fetchFile(owner: string, repo: string, sha: string, path: 
   if (fileCache.size > 500) fileCache.delete(fileCache.keys().next().value!);
   fileCache.set(key, contents);
   return contents;
+}
+
+const BRANCHES = 'query($owner: String!, $name: String!, $search: String) { repository(owner: $owner, name: $name) { defaultBranchRef { name target { oid } } refs(refPrefix: "refs/heads/", first: 100, query: $search, orderBy: { field: TAG_COMMIT_DATE, direction: DESC }) { nodes { name target { oid } } } } }';
+const branch = (raw: Record<string, any> | null | undefined): Branch | null => typeof raw?.name === 'string' && /^[a-f0-9]{40}$/.test(raw.target?.oid ?? '') ? { name: raw.name, sha: raw.target.oid } : null;
+// The default branch and up to 100 branches, most recently committed first, optionally only those whose names contain `query`. Read-only.
+export async function fetchBranches(owner: string, repo: string, query: string, runner: Runner = runCommand): Promise<BranchList> {
+  const output = await runner('gh', ['api', 'graphql', '-f', `query=${BRANCHES}`, '-f', `owner=${owner}`, '-f', `name=${repo}`, '-f', `search=${query}`], { signal: new AbortController().signal, maxBytes: 5_000_000 });
+  const repository = JSON.parse(output)?.data?.repository;
+  if (!repository) throw new UserError('GitHub returned no branches for this repository.');
+  const nodes: unknown[] = Array.isArray(repository.refs?.nodes) ? repository.refs.nodes : [];
+  return { defaultBranch: branch(repository.defaultBranchRef), branches: nodes.map(node => branch(node as Record<string, any>)).filter((value): value is Branch => value !== null) };
+}
+
+// Every file in a commit, given its SHA or a branch name. A branch is resolved to its current commit first. Commits never change, so trees are cached.
+const treeCache = new Map<string, RepoTree>();
+export async function fetchTree(owner: string, repo: string, ref: string, runner: Runner = runCommand): Promise<RepoTree> {
+  const signal = new AbortController().signal, base = `repos/${owner}/${repo}`;
+  if (!ref || ref.length > 255 || ref.startsWith('-') || ref.split('/').some(part => !part || part === '.' || part === '..')) throw new UserError('Invalid branch.', 400);
+  const sha = /^[a-f0-9]{40}$/.test(ref) ? ref : (await runner('gh', ['api', '-H', 'Accept: application/vnd.github.sha', `${base}/commits/${ref.split('/').map(encodeURIComponent).join('/')}`], { signal, failureDetail: () => `GitHub has no branch named ${ref}.` })).trim();
+  if (!/^[a-f0-9]{40}$/.test(sha)) throw new UserError(`GitHub has no branch named ${ref}.`, 404);
+  const key = `${owner}/${repo}@${sha}`.toLowerCase(), cached = treeCache.get(key);
+  if (cached) return cached;
+  const value = JSON.parse(await runner('gh', ['api', `${base}/git/trees/${sha}?recursive=1`], { signal, maxBytes: 60_000_000, timeoutMs: 60_000 }));
+  const entries: Record<string, unknown>[] = Array.isArray(value?.tree) ? value.tree : [];
+  const tree: RepoTree = { sha, paths: entries.filter(entry => entry.type === 'blob' && typeof entry.path === 'string').map(entry => entry.path as string), truncated: Boolean(value?.truncated) };
+  if (treeCache.size > 50) treeCache.delete(treeCache.keys().next().value!);
+  treeCache.set(key, tree);
+  return tree;
 }

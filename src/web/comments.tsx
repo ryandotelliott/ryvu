@@ -15,7 +15,8 @@ import { commandKey } from './shell';
 import type { CommentMode } from './display';
 import type { CommentThread, Conversation as ConversationData, DiffSide, DraftComment, ReviewComment, ReviewEvent } from '../types';
 
-export type ComposerTarget = { path: string; side: DiffSide; start: number; end: number };
+// A comment on lines of a diff, or on the whole file.
+export type ComposerTarget = { path: string; side: DiffSide; start: number; end: number } | { path: string; file: true };
 export type ReviewApi = {
   viewer: string; author: string;
   threads: CommentThread[]; drafts: DraftComment[];
@@ -32,9 +33,10 @@ export type CommentData = { kind: 'thread'; thread: CommentThread } | { kind: 'd
 export type AnnotationData = CommentData | { kind: 'group'; items: CommentData[] } | { kind: 'composer'; target: ComposerTarget };
 const plainText = (markdown: string) => markdown.split('\n').map(line => line.replace(/<[^>]+>|[`*_>#~]|!?\[([^\]]*)\]\([^)]*\)/g, '$1').trim()).find(Boolean) ?? '';
 function commentSummary(data: CommentData) {
-  if (data.kind === 'draft') return { author: '', text: plainText(data.draft.body), count: 1, line: lineLabel(data.draft.startLine, data.draft.line), pending: true, resolved: false, outdated: false };
-  const { thread } = data, first = thread.comments[0], outdated = thread.outdated || thread.line === null;
-  return { author: first?.author ?? '', text: plainText(first?.body ?? ''), count: thread.comments.length, line: outdated ? `old ${lineLabel(null, thread.originalLine ?? 0)}` : lineLabel(thread.startLine, thread.line!), pending: false, resolved: thread.resolved, outdated };
+  if (data.kind === 'draft') return { author: '', text: plainText(data.draft.body), count: 1, line: data.draft.line === null ? 'this file' : lineLabel(data.draft.startLine, data.draft.line), pending: true, resolved: false, outdated: false };
+  const { thread } = data, first = thread.comments[0], outdated = thread.outdated;
+  const line = thread.subject === 'file' ? 'this file' : outdated || thread.line === null ? `old ${lineLabel(null, thread.originalLine ?? 0)}` : lineLabel(thread.startLine, thread.line);
+  return { author: first?.author ?? '', text: plainText(first?.body ?? ''), count: thread.comments.length, line, pending: false, resolved: thread.resolved, outdated };
 }
 
 const lineLabel = (start: number | null, end: number) => start && start < end ? `lines ${start}–${end}` : `line ${end}`;
@@ -96,7 +98,7 @@ function Composer({ target }: { target: ComposerTarget }) {
   // The diff renderer assigns the annotation's shadow-DOM slot after React's autoFocus runs.
   useEffect(() => { container.current?.querySelector('textarea')?.focus({ preventScroll: true }); }, [target]);
   return <div className="thread composer" ref={container}>
-    <div className="composer-label">Comment on {lineLabel(target.start < target.end ? target.start : null, target.end)}</div>
+    <div className="composer-label">Comment on {'file' in target ? 'this file' : lineLabel(target.start < target.end ? target.start : null, target.end)}</div>
     <Editor placeholder="Leave a comment" submitLabel="Add to review" onCancel={() => review.setComposer(null)} onSubmit={async body => { await review.addDraft(target, body); review.setComposer(null); }} />
   </div>;
 }
@@ -131,6 +133,21 @@ function CommentIndicator({ items }: { items: CommentData[] }) {
     </Popover>
   </div>;
 }
+// Comments on the whole file, above its diff. Like inline comments, they hide in the hidden comment mode unless jumped to.
+export function FileComments({ path }: { path: string }) {
+  const review = useReview();
+  if (!review) return null;
+  const composer = review.composer?.path === path && 'file' in review.composer ? review.composer : null;
+  const items: CommentData[] = [
+    ...review.threads.filter(thread => thread.path === path && thread.subject === 'file').map(thread => ({ kind: 'thread' as const, thread })),
+    ...review.drafts.filter(draft => draft.path === path && draft.line === null).map(draft => ({ kind: 'draft' as const, draft }))
+  ].filter(item => review.commentMode !== 'hidden' || commentAnchor(item) === review.focus);
+  if (!items.length && !composer) return null;
+  return <div className="file-comments">
+    {items.map(item => <div key={commentAnchor(item)} data-comment-anchor={commentAnchor(item)}><CollapsibleComment data={item} /></div>)}
+    {composer && <Composer target={composer} />}
+  </div>;
+}
 export function Annotation({ data }: { data: AnnotationData }) {
   if (data.kind === 'composer') return <div className="annotation"><Composer target={data.target} /></div>;
   if (data.kind === 'group') return <CommentIndicator items={data.items} />;
@@ -162,7 +179,7 @@ export function Activity({ conversation, opened, onFile }: { conversation: Conve
         </div></article>
       : <ActivityEvent icon={<span className={`review-state ${state.tone}`}>{state.icon}</span>} at={review.submittedAt} now={now}><strong>{review.author}</strong> <span className={`review-state ${state.tone}`}>{state.label}</span></ActivityEvent> }; }),
     ...conversation.comments.map(comment => ({ at: comment.createdAt, key: `comment-${comment.id}`, node: <article className="activity-card"><CommentBody comment={comment} now={now} /></article> })),
-    ...conversation.threads.filter(thread => thread.outdated || thread.line === null).map(thread => ({ at: thread.comments[0].createdAt, key: `thread-${thread.id}`, node: <article className="activity-card" id={`activity-thread-${thread.id}`}>
+    ...conversation.threads.filter(thread => thread.outdated).map(thread => ({ at: thread.comments[0].createdAt, key: `thread-${thread.id}`, node: <article className="activity-card" id={`activity-thread-${thread.id}`}>
       <button type="button" className="timeline-file" onClick={() => onFile(thread.path)}><FileCode2 size={12} />{thread.path}{thread.originalLine ? `:${thread.originalLine}` : ''}<span className="outdated-chip">Outdated</span></button>
       <ThreadView thread={thread} compact />
     </article> }))
