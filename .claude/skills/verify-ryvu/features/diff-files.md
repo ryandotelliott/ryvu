@@ -10,12 +10,12 @@ The Diff page shows every changed file as a card with syntax-highlighted code. T
 - `sidebar-resize` adjusts the width by dragging its edge or pressing arrow keys on the divider; double-click resets it. Width persists across reloads.
 - `sidebar-tree` compacts nested folder chains and truncates only the last folder name.
 - `sidebar-repositories` collapses the repository links to give files more room.
-- `sidebar-progress` fills the active file row as you scroll through its diff, in both folder and diff-order views.
+- `sidebar-progress` fills the active file row as you scroll through its diff, in both folder and diff-order views. Collapsed active files use a full fill without marking them reviewed.
 - `sidebar-filter` narrows the list by path text.
 - `sidebar-counts` shows per-file additions and deletions in both layouts; multi-PR ranges use the combined diff's counts (`journeys/stack-range.mjs`).
 - `sidebar-jump` scrolls to a file, landing its card at 108px, and marks it current.
 - `sticky-header` pins the current file's header 16px below the toolbar, with no code showing around it even mid-scroll.
-- `reviewed` ticks a file reviewed and updates `N/M reviewed`.
+- `reviewed` ticks a file reviewed and updates `N/M reviewed`; unchecking it reopens the file in the current view.
 - `markdown-preview` switches a Markdown file between its diff and the full rendered file, with Mermaid diagrams and highlighted fenced code. Deleted files preview the base version.
 
 ## How to get to it (user POV)
@@ -38,7 +38,7 @@ Preconditions:
 - **Jump.** Click the row for a file further down. That file's `.diff-card` top is 108px (±2) and its row has `.is-current`.
 - **Sticky header.** Scroll the wheel a few hundred pixels. The header of the card that spans the top of the view sits at top 108px.
 - **Nothing shows around the pinned header** (`journeys/sticky-header.mjs`, `VERIFY_GUIDE_PR=…` runs it on a Guide). It records compositor frames with a CDP screencast during 60 fast wheel steps. In every frame, the 16px gap is pure page background, and the header's top corners and top line hold only palette colours.
-- **Reading progress** (`journeys/file-progress.mjs`). Scroll within a long file and assert the active row's fill grows; scroll back and assert it shrinks. Jump to the next file and check its fill starts at zero. Run in both sidebar views and both themes.
+- **Reading progress** (`journeys/file-progress.mjs`). Collapse the active file and check its fill stays at 100%, including while scrolling. Reopen it and check scroll-based progress returns. The full collapsed fill must not mark it reviewed. Scroll within a long file and assert the fill grows; scroll back and assert it shrinks. Jump to the next file and check its fill starts at zero. Run in both sidebar views and both themes.
 - **Reviewed.** Click the first card's `.file-reviewed [role="checkbox"]`. The toolbar reads `1/M reviewed`.
 - **Full-height navigation** (`journeys/review-sidebar.mjs`). Check the sidebar on all three views, its search panel, compact folder labels, resize persistence, shadcn collapse controls, navigation links, and the mobile Sheet.
 - **Proof.** Screenshots of the drawn diff, the sidebar, the jump and the reviewed count.

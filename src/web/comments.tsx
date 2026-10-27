@@ -92,8 +92,10 @@ function DraftView({ draft }: { draft: DraftComment }) {
 }
 
 function Composer({ target }: { target: ComposerTarget }) {
-  const review = useReview()!;
-  return <div className="thread composer">
+  const review = useReview()!, container = useRef<HTMLDivElement>(null);
+  // The diff renderer assigns the annotation's shadow-DOM slot after React's autoFocus runs.
+  useEffect(() => { container.current?.querySelector('textarea')?.focus({ preventScroll: true }); }, [target]);
+  return <div className="thread composer" ref={container}>
     <div className="composer-label">Comment on {lineLabel(target.start < target.end ? target.start : null, target.end)}</div>
     <Editor placeholder="Leave a comment" submitLabel="Add to review" onCancel={() => review.setComposer(null)} onSubmit={async body => { await review.addDraft(target, body); review.setComposer(null); }} />
   </div>;
@@ -119,9 +121,12 @@ function CollapsibleComment({ data }: { data: CommentData }) {
 function CommentIndicator({ items }: { items: CommentData[] }) {
   const review = useReview()!, anchors = items.map(commentAnchor), open = anchors.includes(review.focus ?? '');
   const count = items.reduce((sum, item) => sum + commentSummary(item).count, 0), pending = items.some(item => item.kind === 'draft');
+  const active = items.find(item => item.kind === 'draft' || !item.thread.resolved), summary = commentSummary(active ?? items[0]);
+  const author = summary.author || review.viewer || 'you', resolved = !active;
+  const label = `${count} ${count === 1 ? 'comment' : 'comments'} by ${author} on ${summary.line}${resolved ? ' · Resolved' : pending ? ' · Pending' : ''}`;
   return <div className="comment-indicator-row" data-comment-anchor={anchors.join(' ')}>
     <Popover open={open} onOpenChange={next => review.setFocus(next ? anchors[0] : null)}>
-      <Tip content={`${count} ${count === 1 ? 'comment' : 'comments'} on ${commentSummary(items[0]).line}`} delay="instant" side="left"><PopoverTrigger render={<button type="button" className={`comment-indicator ${pending ? 'is-pending' : ''} ${open ? 'is-open' : ''}`} aria-label={`${count} comments`} />}><MessageSquare size={11} />{count}</PopoverTrigger></Tip>
+      <Tip content={label} delay="instant" side="left"><PopoverTrigger render={<Button variant="ghost" size="icon" className={`comment-indicator dark:hover:bg-muted ${resolved ? 'is-resolved' : ''}`} aria-label={label} />}><Avatar login={author} size={24} tooltip={false} /></PopoverTrigger></Tip>
       <PopoverContent side="left" align="start" sideOffset={8} className="comment-popover" initialFocus={focusOnKeyboardOpen}><ScrollArea className="comment-popover-scroll"><div className="comment-popover-body">{items.map(item => <CommentBlock key={commentAnchor(item)} data={item} />)}</div></ScrollArea></PopoverContent>
     </Popover>
   </div>;

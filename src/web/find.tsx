@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { fileAnchor, scrollPageBy } from './pull-page';
+import { diffPositions, fileAnchor, scrollPageBy } from './pull-page';
 import { Tip } from './ui';
 import type { ChangedFile } from '../types';
 
@@ -71,23 +71,24 @@ export function useFindHighlights(matches: FindMatch[], current: number) {
   }, [matches, current]);
 }
 
-// Steps through a file until the match's row is drawn, then centers it below the sticky bars.
+// The renderer's line positions include expanded context and measured row heights, even for rows outside the DOM.
 export function scrollToMatch(match: FindMatch, offset: number) {
-  let frames = 0, started = false;
+  let frame = 0, frames = 0, settled = 0, started = false;
   const step = () => {
-    const row = rowFor(match);
-    if (row) { const box = row.getBoundingClientRect(); scrollPageBy(box.top + box.height / 2 - (window.innerHeight + offset) / 2); return; }
-    if (++frames > 160) return;
-    const card = document.getElementById(fileAnchor(match.path));
-    if (card && frames % 2 === 0) {
-      const box = card.getBoundingClientRect();
-      if (!started) { scrollPageBy(box.top - offset); started = true; }
-      else if (box.bottom > window.innerHeight) scrollPageBy(window.innerHeight * 0.6);
-      else return;
+    const container = document.getElementById(fileAnchor(match.path))?.querySelector<HTMLElement>('diffs-container');
+    const row = rowFor(match), position = container && diffPositions.get(container)?.getLinePosition(match.line, match.side);
+    const box = row?.getBoundingClientRect() ?? (container && position ? { top: container.getBoundingClientRect().top + position.top, height: position.height } : null);
+    if (box) {
+      const delta = box.top + box.height / 2 - (window.innerHeight + offset) / 2;
+      if (Math.abs(delta) > 1) { scrollPageBy(delta); settled = 0; }
+      else if (row) settled++;
+    } else if (container && !started) {
+      scrollPageBy(container.getBoundingClientRect().top - offset); started = true;
     }
-    requestAnimationFrame(step);
+    if (settled < 3 && ++frames < 30) frame = requestAnimationFrame(step);
   };
   step();
+  return () => cancelAnimationFrame(frame);
 }
 
 export function FindBar({ query, onQuery, count, current, onStep, onClose, focusKey }: { query: string; onQuery: (query: string) => void; count: number; current: number; onStep: (direction: 1 | -1) => void; onClose: () => void; focusKey: number }) {

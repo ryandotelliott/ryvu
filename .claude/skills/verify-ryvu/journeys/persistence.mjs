@@ -30,7 +30,10 @@ export default async function (ctx) {
   const line = page.locator('.diff-card.expanded [data-line-type="change-addition"]').first();
   await line.hover();
   await page.locator('.diff-card.expanded [data-utility-button]').first().click();
-  await page.getByPlaceholder('Leave a comment').fill(text);
+  const composer = page.getByPlaceholder('Leave a comment');
+  await page.waitForFunction(() => document.activeElement?.matches('textarea[placeholder="Leave a comment"]'));
+  await page.keyboard.type(text);
+  ctx.check(await composer.inputValue() === text, 'clicking the line plus focuses the input, so typing enters the pending comment');
   await page.getByRole('button', { name: 'Add to review' }).click();
   await page.locator('.thread', { hasText: text }).waitFor();
   ctx.check(drafts(text) === 1, 'Add to review stores one pending comment in the scratch database');

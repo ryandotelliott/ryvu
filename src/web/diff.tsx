@@ -2,14 +2,14 @@ import { lazy, memo, Suspense, useContext, useEffect, useMemo, useRef, useState,
 import { Link } from '@tanstack/react-router';
 import { FileDiff, VirtualizerContext, WorkerPoolContextProvider } from '@pierre/diffs/react';
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
-import { DEFAULT_VIRTUAL_FILE_METRICS, parsePatchFiles, Virtualizer, type DiffLineAnnotation, type SelectedLineRange } from '@pierre/diffs';
+import { DEFAULT_VIRTUAL_FILE_METRICS, parsePatchFiles, VirtualizedFileDiff, Virtualizer, type DiffLineAnnotation, type FileDiffOptions, type SelectedLineRange } from '@pierre/diffs';
 import { ChevronRight, Code2, Eye, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Annotation, type AnnotationData, type CommentData } from './comments';
 import { pullLink } from './links';
 import { hideWhitespace, lineHeightFor, type DisplaySettings } from './display';
-import { commentAnchor, DiffSourceContext, fileAnchor, pageVirtualizer, splitPath, useReview } from './pull-page';
+import { commentAnchor, DiffSourceContext, diffPositions, fileAnchor, pageVirtualizer, splitPath, useReview } from './pull-page';
 import { ErrorBoundary, Tip } from './ui';
 import { readFile } from '../pull.functions';
 import type { ChangedFile, DraftComment, CommentThread, RangePull } from '../types';
@@ -129,8 +129,8 @@ function Diff({ file, display, selectedLines, onSelectionChange }: { file: Chang
   const groupCache = useRef(new Map<string, AnnotationData & { kind: 'group' }>());
   const annotations = useMemo(() => {
     const comments = [
-      // Resolved threads stay off the file unless you jump to one.
-      ...(threads ?? []).filter(thread => thread.path === file.path && thread.line !== null && (!thread.resolved || `thread-${thread.id}` === focus)).map(thread => ({ side: thread.side, lineNumber: thread.line!, metadata: metadata(thread, 'thread') })),
+      // Indicator mode keeps resolved threads as faded avatars; inline mode only reveals them when jumped to.
+      ...(threads ?? []).filter(thread => thread.path === file.path && thread.line !== null && (mode === 'indicators' || !thread.resolved || `thread-${thread.id}` === focus)).map(thread => ({ side: thread.side, lineNumber: thread.line!, metadata: metadata(thread, 'thread') })),
       ...(drafts ?? []).filter(draft => draft.path === file.path).map(draft => ({ side: draft.side, lineNumber: draft.line, metadata: metadata(draft, 'draft') }))
     ].filter(item => mode !== 'hidden' || commentAnchor(item.metadata) === focus);
     let list: DiffLineAnnotation<AnnotationData>[] = comments as DiffLineAnnotation<AnnotationData>[];
@@ -149,8 +149,12 @@ function Diff({ file, display, selectedLines, onSelectionChange }: { file: Chang
     return list;
   }, [threads, drafts, composer, file.path, mode, focus]);
   // A new options object, or a new function inside it, makes the renderer redraw the whole file.
-  const options = useMemo(() => ({
+  const options = useMemo<FileDiffOptions<AnnotationData, undefined>>(() => ({
     theme, themeType: 'system', unsafeCSS, diffStyle: display.layout, overflow: display.wrap ? 'wrap' : 'scroll', disableLineNumbers: !display.lineNumbers, lineDiffType: display.wordDiff ? 'word' : 'none', disableFileHeader: true, enableLineSelection: true,
+    onPostRender: (node, instance, phase) => {
+      if (phase === 'unmount') diffPositions.delete(node);
+      else if (instance instanceof VirtualizedFileDiff) diffPositions.set(node, instance);
+    },
     onLineSelectionEnd: (range: SelectedLineRange | null) => onSelectionChange(file.path, range),
     enableGutterUtility: Boolean(setComposer), hunkSeparators: 'line-info', expansionLineCount,
     // Expanding a hunk fetches both versions of the file once; until then only the patch is shown.
@@ -164,7 +168,7 @@ function Diff({ file, display, selectedLines, onSelectionChange }: { file: Chang
       const side = range.endSide ?? range.side ?? 'additions', sameSide = (range.side ?? side) === side;
       setComposer({ path: file.path, side, start: sameSide ? Math.min(range.start, range.end) : range.end, end: sameSide ? Math.max(range.start, range.end) : range.end });
     }
-  } as const), [display, setComposer, file.path, source, onSelectionChange]);
+  }), [display, setComposer, file.path, source, onSelectionChange]);
   const size = { font: display.fontSize, line: lineHeightFor(display.fontSize) }, metrics = useMemo(() => ({ ...DEFAULT_VIRTUAL_FILE_METRICS, lineHeight: size.line, diffHeaderHeight: 0, spacing: 0, paddingTop: 0, paddingBottom: 0 }), [size.line]);
   const view = useRef<HTMLDivElement>(null);
   useEffect(() => {

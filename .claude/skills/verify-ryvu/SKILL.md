@@ -69,6 +69,7 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 `<journey>` is a file in `journeys/`. Exit code 0 means every check passed. Every run also fails on an uncaught page error or a Content-Security-Policy violation.
 
 - Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`.
+- `find-expanded` (needs `VERIFY_FIND_PR`, optional `VERIFY_FIND_FILE`): expands a gap of at least 2000 unchanged lines, then checks that find jumps directly to a changed line below it instead of walking through the file.
 - `expansion` (needs `VERIFY_GUIDE_PR`): unviewed Guide blocks start expanded; manual toggles, viewed actions and bulk controls preserve the other tab's expansion; viewed state survives reloads.
 - `guide-scroll` (needs `VERIFY_GUIDE_PR` with a long explanation): wheel scrolling continues onto the page at both edges of the explanation, including in a short viewport.
 - `selection` (needs `VERIFY_GUIDE_PR` with a multi-line reference): gutter clicks replace Guide highlights, repeated clicks clear selection, ranges survive redraws and tab switching, and a multi-line local draft survives reload. It deletes the draft without submitting a review.

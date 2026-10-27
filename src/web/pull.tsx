@@ -91,6 +91,8 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
   const [filter, setFilter] = useState(''), [filterOpen, setFilterOpen] = useState(false), [current, setCurrent] = useState(0);
   const [find, setFind] = useState({ open: false, query: '', index: 0, focus: 0 });
   const lastFindQuery = useRef('');
+  const cancelFindScroll = useRef<() => void>(() => {});
+  useEffect(() => () => cancelFindScroll.current(), [view, find.open, find.query]);
   const [previewed, setPreviewed] = useState<string[]>([]);
   const setFilePreview = useCallback((path: string, preview: boolean) => setPreviewed(previous => preview ? [...new Set([...previous, path])] : previous.filter(value => value !== path)), []);
   const [selected, setSelected] = useState<Record<DiffView, LineSelection | null>>({ diff: null, guide: null }), [composer, setComposer] = useState<ComposerTarget | null>(null), [toast, setToast] = useState('');
@@ -129,19 +131,19 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
     const update = () => {
       frame = 0; let index = 0; items.forEach((id, i) => { const top = document.getElementById(id)?.getBoundingClientRect().top ?? Infinity; if (top <= offset + 8) index = i; }); setCurrent(index);
       const box = document.getElementById(items[index])?.getBoundingClientRect();
-      const progress = view === 'diff' && box ? Math.min(1, Math.max(0, (offset - box.top) / Math.max(1, box.height))) : 1;
+      const progress = view === 'diff' && open.diff.includes(shown[index]?.path ?? '') && box ? Math.min(1, Math.max(0, (offset - box.top) / Math.max(1, box.height))) : 1;
       fileSidebar.current?.style.setProperty('--file-progress', String(progress));
     };
     const onScroll = () => { frame ||= requestAnimationFrame(update); };
     update(); window.addEventListener('scroll', onScroll, { passive: true });
     return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(frame); };
-  }, [items.join('|'), offset, view, sidebarVisible]);
+  }, [items.join('|'), offset, view, sidebarVisible, open.diff]);
   const files = new Map(snapshot.files.map(file => [file.path, file]));
   const diffView: DiffView = view === 'guide' ? 'guide' : 'diff';
   const selectLines = useCallback((path: string, range: SelectedLineRange | null) => setSelected(previous => ({ ...previous, [diffView]: range ? { path, range } : null })), [diffView]);
   const setFileViewed = useCallback((paths: string[], value: boolean) => {
     setViewed(previous => value ? [...new Set([...previous, ...paths])] : previous.filter(path => !paths.includes(path)));
-    if (value) setOpen(previous => ({ ...previous, [diffView]: previous[diffView].filter(path => !paths.includes(path)) }));
+    setOpen(previous => ({ ...previous, [diffView]: value ? previous[diffView].filter(path => !paths.includes(path)) : [...new Set([...previous[diffView], ...paths])] }));
   }, [diffView]);
   const markViewed = useCallback((path: string, value: boolean) => setFileViewed([path], value), [setFileViewed]);
   const toggle = useCallback((path: string) => setOpen(previous => ({ ...previous, [diffView]: previous[diffView].includes(path) ? previous[diffView].filter(value => value !== path) : [...previous[diffView], path] })), [diffView]);
@@ -205,7 +207,8 @@ export function PullView({ detail, onDetail, view, through, navigation, status, 
     setFilePreview(match.path, false);
     setFind(previous => ({ ...previous, index }));
     if (!open[diffView].includes(match.path)) setOpen(previous => ({ ...previous, [diffView]: [...previous[diffView], match.path] }));
-    requestAnimationFrame(() => scrollToMatch(match, offset));
+    cancelFindScroll.current();
+    cancelFindScroll.current = scrollToMatch(match, offset);
   }
   const stepMatch = (direction: 1 | -1) => { if (matches.length) goToMatch((findIndex + direction + matches.length) % matches.length); };
   // Typing jumps to the first match in or after the file you're reading.

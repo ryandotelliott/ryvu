@@ -33,7 +33,7 @@ Each file starts with an H1 and a paragraph describing the user-visible behaviou
 
 - [Inbox and ⌘K](./inbox.md) (`journeys/inbox.mjs`): the PR list, tabs, the command palette, opening a PR.
 - [Diff files](./diff-files.md) (`journeys/diff-files.mjs`, `journeys/review-sidebar.mjs`, `journeys/file-progress.mjs`, `journeys/sticky-header.mjs`, `journeys/markdown-preview.mjs`): drawing diffs, the file sidebar, filtering, jumping, sticky headers, Reviewed, rendered Markdown with Mermaid and syntax highlighting.
-- [Find in diff](./find-in-diff.md) (`journeys/find.mjs`): ⌘F search, collapsed files, match highlighting.
+- [Find in diff](./find-in-diff.md) (`journeys/find.mjs`, `journeys/find-expanded.mjs`): ⌘F search, collapsed files, match highlighting, and direct jumps past expanded context.
 - [Comments](./comments.md) (`journeys/comments.mjs`): inline threads, indicator popovers, and display modes.
 - [Guide](./guide.md) (`journeys/guide.mjs`): saved walkthroughs, file chips, section navigation.
 

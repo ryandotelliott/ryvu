@@ -1,11 +1,11 @@
 # Comments
 
-Open review threads show under their code lines. Display settings switch threads between inline cards, right-side indicators, and hidden. The Review menu opens the summary and verdict form, with a link to local pending comments.
+Open review threads show under their code lines. Display settings switch threads between inline cards, right-side author avatars, and hidden. Resolved indicators remain visible with faded avatars. The Review menu opens the summary and verdict form, with a link to local pending comments.
 
 ## Sub-features
 
 - `threads-inline` shows unresolved threads on current lines as foldable cards.
-- `comments-indicators` replaces inline threads with markers that open a popover.
+- `comments-indicators` replaces inline threads with 32px avatar buttons that open a popover. Unresolved avatars use full opacity; resolved avatars use 40%. The button background appears on hover.
 - `comments-hidden` removes threads from the code.
 - `review-menu` opens the review form and jumps to pending comments. The final Submit review action writes to GitHub.
 
@@ -23,9 +23,10 @@ Preconditions:
 - Never click Reply or Submit review. Add to review stores a local draft only.
 
 - **Inline.** Select the thread's file through file search, then scroll until its comment link and author from GitHub are visible.
-- **Indicators.** Display settings → radio `Indicators`, Escape. `.comment-indicator` exists and `.comment-fold` is gone.
+- **Indicators.** Display settings → radio `Indicators`, Escape. `.comment-indicator` is an avatar button and `.comment-fold` is gone. Hover adds a background. Resolved threads on current lines use `.is-resolved` and a faded avatar; both states open their comments when clicked.
 - **Hidden.** Display settings → radio `Hidden`, Escape. Neither exists. Restore `Inline`.
 - **Review.** `review-sidebar` opens and dismisses Review. `markdown-preview` uses Review → pending comments to reveal a local draft, then deletes it without submitting.
+- **Composer focus.** `persistence` clicks a line's plus button and types without clicking the input, then checks that the pending comment contains the typed text.
 - **Proof.** Screenshots of the inline thread and indicator mode.
 
 ## Gotchas

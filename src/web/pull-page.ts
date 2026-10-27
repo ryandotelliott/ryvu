@@ -1,5 +1,5 @@
 import { createContext, useContext, type RefObject } from 'react';
-import type { Virtualizer } from '@pierre/diffs';
+import type { VirtualizedFileDiff, Virtualizer } from '@pierre/diffs';
 import type { CommentData, ReviewApi } from './comments';
 import type { DiffSource } from './diff';
 
@@ -17,6 +17,7 @@ export function splitPath(path: string) { const parts = path.split('/'); const n
 
 // The page's virtualizer, so programmatic scrolls can tell it the scroll position changed (see scrollPageBy).
 export const pageVirtualizer: RefObject<Virtualizer | null> = { current: null };
+export const diffPositions = new WeakMap<HTMLElement, Pick<VirtualizedFileDiff, 'getLinePosition'>>();
 // Scroll the page from code. The virtualizer caches the scroll position until the browser's next scroll event, and a
 // diff that re-measures itself before then (a jump usually re-renders too) stores a wrong position and draws nothing.
 // Marking it dirty right away makes any measurement read the real position.

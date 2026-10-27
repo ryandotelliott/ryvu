@@ -26,7 +26,7 @@ Preconditions:
 - **Sections.** `go('/pr/…/guide')`, wait for `.section-rail button`. `.chapter-section` count equals the rail's button count and is above 0.
 - **Chip.** Click the first section's first `.chapter-file`. The diff card with that file name is `.expanded` and on screen.
 - **Keys.** Click the noninteractive title in the top bar, then press `j`. Some `.chapter-section` top is 64px (±2).
-- **Expansion** (`journeys/expansion.mjs`). Toggle files and bulk controls in both tabs; marking a file viewed collapses it only in the active tab. Reload and check that viewed blocks start collapsed and unviewed blocks start expanded.
+- **Expansion** (`journeys/expansion.mjs`). Toggle files and bulk controls in both tabs; marking a file viewed collapses it only in the active tab, and unchecking Reviewed opens it in that tab. Reload and check that viewed blocks start collapsed and unviewed blocks start expanded.
 - **Scrolling** (`journeys/guide-scroll.mjs`). In a short viewport, wheel down at the explanation's bottom and up at its top. The page should move in both directions.
 - **Proof.** Screenshots of the Guide and the position after `j`.
 

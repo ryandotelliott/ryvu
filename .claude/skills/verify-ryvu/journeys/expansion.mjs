@@ -37,10 +37,20 @@ export default async function (ctx) {
   await view('Diff');
   ctx.check(JSON.stringify(expanded(await state())) === JSON.stringify(expanded(initialDiff)), 'collapsing a Guide file leaves Diff expansion unchanged');
   await card(second).locator('.file-toggle').click();
+  await card(second).locator('.file-reviewed [role=checkbox]').click();
+  await card(second).locator('.file-reviewed [role=checkbox]').click();
+  ctx.check(await isOpen(second) && !(await isViewed(second)), 'unchecking Reviewed reopens the collapsed Diff file');
   await view('Guide');
   ctx.check(!(await isOpen(first)) && await isOpen(second), 'collapsing a Diff file leaves Guide expansion unchanged');
 
   await view('Diff');
+  await card(second).locator('.file-toggle').click();
+  await view('Guide');
+  await card(second).locator('.file-reviewed [role=checkbox]').click();
+  await card(second).locator('.file-reviewed [role=checkbox]').click();
+  ctx.check(await isOpen(second) && !(await isViewed(second)), 'unchecking Reviewed reopens the collapsed Guide block');
+  await view('Diff');
+  ctx.check(!(await isOpen(second)), 'unchecking Reviewed in Guide leaves the Diff file collapsed');
   await card(second).locator('.file-toggle').click();
   await view('Guide');
   await card(second).locator('.file-reviewed [role=checkbox]').click();

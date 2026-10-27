@@ -12,11 +12,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { JobView } from '../types';
 
 const avatarColors = ['#5b7fd6', '#c06aae', '#d08a3e', '#3f9a78', '#8a7a5c', '#7d8ca3', '#b8615a', '#4f9aa8'];
-export function Avatar({ login, size = 20 }: { login: string; size?: number }) {
+export function Avatar({ login, size = 20, tooltip = true }: { login: string; size?: number; tooltip?: boolean }) {
   const hash = [...login].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0, 7);
-  return <Tip content={login} delay="long"><AvatarRoot className="avatar" aria-hidden style={{ width: size, height: size }}>
+  const avatar = <AvatarRoot className="avatar" aria-hidden style={{ width: size, height: size }}>
     <AvatarFallback className="font-semibold text-white" style={{ fontSize: Math.round(size * 0.4), background: avatarColors[hash % avatarColors.length] }}>{login.replace(/[^a-z0-9]/gi, '').slice(0, 2).toUpperCase()}</AvatarFallback>
-  </AvatarRoot></Tip>;
+  </AvatarRoot>;
+  return tooltip ? <Tip content={login} delay="long">{avatar}</Tip> : avatar;
 }
 
 export function PullIcon({ draft, state = 'open', size = 15 }: { draft?: boolean; state?: 'open' | 'closed' | 'merged'; size?: number }) {
