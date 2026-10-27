@@ -121,7 +121,7 @@ export function PullPage({ target }: { target: PullTarget }) {
   if (!shown) return preparing;
   const status = forThis && (app.analyzing || app.jobError || app.job?.state === 'cancelled') ? <StatusBox key={app.epoch.current} job={app.job} error={app.jobError} canCancel={Boolean(app.currentJob.current)} onCancel={() => void app.cancel()} /> : null;
   return <Suspense fallback={preparing}>
-    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} through={target.through} navigation={navigation} status={status} analyzing={forThis && app.analyzing}
+    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} through={target.through} browsing={{ branch: target.branch, path: target.path }} navigation={navigation} status={status} analyzing={forThis && app.analyzing}
       onDetail={update => app.setPulls(current => current[target.key] ? { ...current, [target.key]: update(current[target.key]) } : current)}
       onAnalyze={fresh => void app.analyze(target, fresh, shown.snapshot.files.map(file => file.path))} />
   </Suspense>;

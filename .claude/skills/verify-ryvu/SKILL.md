@@ -1,6 +1,6 @@
 ---
 name: verify-ryvu
-description: Launch an isolated PR Guide (ryvu) instance and drive its browser UI with Playwright to prove a change works, saving screenshots and a transcript. Use after changing anything a user sees in PR Guide (inbox, ⌘K palette, Overview, Guide or Diff pages, file sidebar, find in diff, comments, display settings), when asked to verify, test or screenshot the app, or when a PR Guide page looks broken.
+description: Launch an isolated PR Guide (ryvu) instance and drive its browser UI with Playwright to prove a change works, saving screenshots and a transcript. Use after changing anything a user sees in PR Guide (inbox, ⌘K palette, Overview, Guide, Diff or Files pages, file sidebar, find in diff, comments, display settings), when asked to verify, test or screenshot the app, or when a PR Guide page looks broken.
 ---
 
 # Verify PR Guide
@@ -68,7 +68,7 @@ node .claude/skills/verify-ryvu/scripts/drive.mjs <journey> [--dark] [--headed]
 
 `<journey>` is a file in `journeys/`. Exit code 0 means every check passed. Every run also fails on an uncaught page error or a Content-Security-Policy violation.
 
-- Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`.
+- Feature journeys: `inbox`, `diff-files`, `sticky-header`, `find`, `comments`, `guide`, `files`.
 - `find-expanded` (needs `VERIFY_FIND_PR`, optional `VERIFY_FIND_FILE`): expands a gap of at least 2000 unchanged lines, then checks that find jumps directly to a changed line below it instead of walking through the file.
 - `expansion` (needs `VERIFY_GUIDE_PR`): unviewed Guide blocks start expanded; manual toggles, viewed actions and bulk controls preserve the other tab's expansion; viewed state survives reloads.
 - `guide-scroll` (needs `VERIFY_GUIDE_PR` with a long explanation): wheel scrolling continues onto the page at both edges of the explanation, including in a short viewport.
@@ -113,7 +113,7 @@ To verify something no journey covers, add a journey (or a temporary `journeys/_
 
 Stable handles in this app (prefer these over coordinates):
 
-- **Routes:** `/pr/<owner>/<repo>/<n>` (Overview), `/guide`, `/diff`. Home tabs use `?tab=review|mine|guides`.
+- **Routes:** `/pr/<owner>/<repo>/<n>` (Overview), `/guide`, `/diff`, `/files?branch=<name>&path=<path>`. Home tabs use `?tab=review|mine|guides`.
 - **Inbox:** `a.pull-row:not(.skeleton)` and `.pull-title`. The ⌘K input has placeholder `Search pull requests, or paste a link or number`.
 - **PR page:**
   - `.view-tabs a[aria-current="page"]` and `.pr-heading h1`.

@@ -23,11 +23,13 @@ export type PullPage = { items: PullSummary[]; total: number; cursor: string | n
 export type Resolution = { kind: 'none' | 'link' | 'number'; items: PullSummary[]; error?: string };
 export type DiffSide = 'additions' | 'deletions';
 export type ReviewComment = { id: number; author: string; body: string; createdAt: string; url: string };
-export type CommentThread = { id: number; path: string; side: DiffSide; line: number | null; startLine: number | null; originalLine: number | null; outdated: boolean; resolved: boolean; comments: ReviewComment[] };
+// `subject` is 'file' for a comment on the whole file, which has no line.
+export type CommentThread = { id: number; path: string; subject: 'line' | 'file'; side: DiffSide; line: number | null; startLine: number | null; originalLine: number | null; outdated: boolean; resolved: boolean; comments: ReviewComment[] };
 export type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
 export type ReviewSummary = { id: number; author: string; state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED'; body: string; submittedAt: string; url: string };
 export type Conversation = { threads: CommentThread[]; reviews: ReviewSummary[]; comments: ReviewComment[] };
-export type DraftComment = { id: string; path: string; side: DiffSide; startLine: number | null; line: number; body: string; headSHA: string; createdAt: string };
+// `line` is null for a comment on the whole file.
+export type DraftComment = { id: string; path: string; side: DiffSide; startLine: number | null; line: number | null; body: string; headSHA: string; createdAt: string };
 export type PriorGuide = { headSHA: string; generatedAt: string };
 // Live review state beside the description. It changes without new commits, so it is never stored with a guide.
 export type PullStatus = { requested: { name: string; team: boolean }[]; checks: 'success' | 'failure' | 'pending' | null; merge: 'behind' | 'conflicts' | 'blocked' | 'unstable' | 'clean' | null; commits: number };
@@ -38,3 +40,10 @@ export type PullStack = { base: string; pulls: StackedPull[] };
 export type RangePull = StackedPull & { author: string; body: string; baseRef: string; headRef: string; files: string[] };
 // `range` is set when the page shows several PRs of one stack as one diff. It runs top first, like `PullStack.pulls`.
 export type PullDetail = { snapshot: Snapshot; guide: Review | null; prior: PriorGuide | null; conversation: Conversation; drafts: DraftComment[]; viewer: string; status: PullStatus | null; stack: PullStack | null; range: RangePull[] | null };
+// A repository's branches for the Files view: the default branch, then the most recently committed ones.
+export type Branch = { name: string; sha: string };
+export type BranchList = { defaultBranch: Branch | null; branches: Branch[] };
+// Every file path in a commit. GitHub stops listing very large trees; `truncated` says so.
+export type RepoTree = { sha: string; paths: string[]; truncated: boolean };
+// A branch's changes against another commit. GitHub lists at most 300 files; `truncated` says it stopped there.
+export type BranchChanges = { files: ChangedFile[]; truncated: boolean };

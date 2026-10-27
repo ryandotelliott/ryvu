@@ -2,6 +2,7 @@ import { createContext, useContext, type RefObject } from 'react';
 import type { VirtualizedFileDiff, Virtualizer } from '@pierre/diffs';
 import type { CommentData, ReviewApi } from './comments';
 import type { DiffSource } from './diff';
+import type { Snapshot } from '../types';
 
 // comments.tsx and diff.tsx export only components so Fast Refresh updates them in place, and these contexts and the
 // page's virtualizer outlive those updates.
@@ -13,6 +14,14 @@ export const commentAnchor = (data: CommentData) => data.kind === 'thread' ? `th
 export const fileAnchor = (path: string) => `file-${encodeURIComponent(path).replace(/%/g, '_')}`;
 // A range's name, bottom PR first, from its PRs listed top first.
 export const rangeLabel = (pulls: readonly { number: number }[]) => `#${pulls[pulls.length - 1].number} – #${pulls[0].number}`;
+// The syntax themes for code in diffs and on Files.
+export const codeTheme = { light: 'pierre-light', dark: 'pierre-dark' } as const;
+// The branch names Files uses for a PR's two sides. A PR from a fork can share its base's branch name, such as main; its head
+// then goes by GitHub's pull/<n>/head name so the two stay apart.
+export function pullBranches(snapshot: Snapshot) {
+  const base = snapshot.baseRef ?? '', head = snapshot.headRef && snapshot.headRef !== base ? snapshot.headRef : `pull/${snapshot.identity.number}/head`;
+  return { base, head };
+}
 export function splitPath(path: string) { const parts = path.split('/'); const name = parts.pop()!; return { name, directory: parts.length ? `${parts.join('/')}/` : '' }; }
 
 // The page's virtualizer, so programmatic scrolls can tell it the scroll position changed (see scrollPageBy).

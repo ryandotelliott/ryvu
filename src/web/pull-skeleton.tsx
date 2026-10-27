@@ -52,6 +52,10 @@ export function PullSkeleton({ target, pull, navigation }: { target: PullTarget;
       </div>
       <aside className="overview-side" aria-label="Details">{['Status', 'Reviewers', 'Checks', 'Branch'].map(label => <section key={label}><h4>{label}</h4><div className="side-row"><Skeleton className="size-4" /><Skeleton className="h-3 w-28" /></div></section>)}<Skeleton className="h-3 w-36" /></aside>
     </div>
+      : target.view === 'files' ? <div className="files-page">
+        <div className="diff-toolbar files-toolbar"><Skeleton className="h-3 w-48" /></div>
+        <div className="diff-body"><div className="file-viewer"><div className="files-loading">{['w-2/5', 'w-3/5', 'w-1/2', 'w-4/5', 'w-1/3', 'w-2/3'].map((width, index) => <Skeleton key={index} className={`h-3 ${width}`} />)}</div></div></div>
+      </div>
       : target.view === 'guide' ? <div className="guide-page">
         <div className="guide-head">
           {heading}

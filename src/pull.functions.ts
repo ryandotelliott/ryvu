@@ -32,13 +32,14 @@ export const readFile = createServerFn({ method: 'GET' })
   })
   .handler(({ data }) => fetchFile(data.owner, data.repo, data.sha, data.path));
 
+// A null `line` comments on the whole file.
 type NewDraft = PullRef & Pick<DraftComment, 'headSHA' | 'path' | 'side' | 'startLine' | 'line' | 'body'>;
 export const addDraft = createServerFn({ method: 'POST' })
   .validator((input: NewDraft) => {
-    const raw = fields(input), pull = pullFrom(raw), line = lineNumber(raw.line, 'line');
-    const startLine = raw.startLine === null || raw.startLine === undefined ? null : lineNumber(raw.startLine, 'start line');
+    const raw = fields(input), pull = pullFrom(raw), line = raw.line === null ? null : lineNumber(raw.line, 'line');
+    const startLine = raw.startLine === null || raw.startLine === undefined || line === null ? null : lineNumber(raw.startLine, 'start line');
     const side = sides.find(value => value === raw.side);
-    if (typeof raw.path !== 'string' || !raw.path || raw.path.length > 1000 || !side || !isHeadSHA(raw.headSHA) || (startLine !== null && startLine > line)) throw new UserError('Invalid comment position.', 400);
+    if (typeof raw.path !== 'string' || !raw.path || raw.path.length > 1000 || !side || !isHeadSHA(raw.headSHA) || (startLine !== null && line !== null && startLine > line)) throw new UserError('Invalid comment position.', 400);
     return { pull, draft: { headSHA: raw.headSHA, path: raw.path, side, startLine: startLine === line ? null : startLine, line, body: text(raw.body, 'comment') } };
   })
   .handler(({ data }) => runtime().store.addDraft(repoName(data.pull), data.pull.number, data.draft));
