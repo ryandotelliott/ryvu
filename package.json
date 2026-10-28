@@ -8,7 +8,9 @@
     "build": "vite build && tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "start": "node --disable-warning=ExperimentalWarning scripts/start.mjs",
-    "test:inbox": "tsc -p tsconfig.inbox-tests.json && node --disable-warning=ExperimentalWarning --test .verify/inbox-tests/tests/inbox.test.js"
+    "test:inbox": "tsc -p tsconfig.inbox-tests.json && node --disable-warning=ExperimentalWarning --test .verify/inbox-tests/tests/inbox.test.js",
+    "test:screenshots": "tsc -p tsconfig.screenshot-tests.json && node --disable-warning=ExperimentalWarning --test .verify/screenshot-tests/tests/screenshots.test.js",
+    "test:guides": "tsc -p tsconfig.guide-tests.json && node --disable-warning=ExperimentalWarning --test .verify/guide-tests/tests/guide-generation.test.js"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -34,7 +36,10 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "10.1.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "rehype-slug": "^6.0.0",
+    "remark-breaks": "^4.0.0",
     "remark-frontmatter": "5.0.0",
     "remark-gfm": "4.0.1",
     "srvx": "1.0.6",

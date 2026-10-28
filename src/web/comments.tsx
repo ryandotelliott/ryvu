@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { agoLong, readStored, useNow, writeStored } from './browser-state';
 import { Avatar, focusOnKeyboardOpen, Kbd, Segmented, Tip } from './ui';
 import { Markdown } from './markdown';
+import { useScreenshotPaste, withoutPendingScreenshots } from './screenshot-paste';
 import { commentAnchor, useReview } from './pull-page';
 import { commandKey } from './shell';
 import type { CommentMode } from './display';
@@ -18,7 +19,7 @@ import type { CommentThread, Conversation as ConversationData, DiffSide, DraftCo
 // A comment on lines of a diff, or on the whole file.
 export type ComposerTarget = { path: string; side: DiffSide; start: number; end: number } | { path: string; file: true };
 export type ReviewApi = {
-  viewer: string; author: string;
+  viewer: string; author: string; repo: string;
   threads: CommentThread[]; drafts: DraftComment[];
   composer: ComposerTarget | null; setComposer: (target: ComposerTarget | null) => void;
   addDraft: (target: ComposerTarget, body: string) => Promise<void>;
@@ -48,18 +49,20 @@ function submitOnShortcut(event: KeyboardEvent, submit: () => void, cancel?: () 
 // A textarea with submit/cancel that reports failures inline.
 function Editor({ initial = '', placeholder, submitLabel, onSubmit, onCancel, autoFocus = true }: { initial?: string; placeholder: string; submitLabel: string; onSubmit: (body: string) => Promise<void>; onCancel?: () => void; autoFocus?: boolean }) {
   const [body, setBody] = useState(initial), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const screenshot = useScreenshotPaste(setBody);
   async function submit() {
-    if (!body.trim() || busy) return;
+    if (!body.trim() || busy || screenshot.isUploading()) return;
     setBusy(true); setError('');
     try { await onSubmit(body); setBody(''); } catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong.'); } finally { setBusy(false); }
   }
   return <div className="comment-editor">
-    <Textarea value={body} onChange={e => setBody(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} rows={3} className="min-h-20 bg-card" onKeyDown={e => submitOnShortcut(e, () => void submit(), onCancel)} />
-    {error && <p className="field-error" role="alert">{error}</p>}
+    <Textarea value={body} onChange={e => setBody(e.target.value)} onPaste={screenshot.onPaste} disabled={busy} placeholder={placeholder} autoFocus={autoFocus} rows={3} className="min-h-20 bg-card" onKeyDown={e => submitOnShortcut(e, () => void submit(), onCancel)} />
+    {screenshot.uploading && <p className="comment-hint" role="status">Uploading screenshot to GitHub…</p>}
+    {(error || screenshot.error) && <p className="field-error" role="alert">{error || screenshot.error}</p>}
     <div className="comment-editor-actions">
       <span className="comment-hint"><Kbd>{commandKey}↵</Kbd> to submit</span>
       {onCancel && <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>Cancel</Button>}
-      <Button size="sm" onClick={() => void submit()} disabled={!body.trim() || busy}>{busy && <LoaderCircle className="spinner" />}{submitLabel}</Button>
+      <Button size="sm" onClick={() => void submit()} disabled={!body.trim() || busy || screenshot.uploading}>{busy && <LoaderCircle className="spinner" />}{submitLabel}</Button>
     </div>
   </div>;
 }
@@ -195,8 +198,9 @@ export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }
   const storageKey = `pr-guide:review-draft:${pullKey}`;
   const [body, setBody] = useState(() => readStored<string>(storageKey, '')), [event, setEvent] = useState<ReviewEvent>('COMMENT');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [open, setOpen] = useState(false);
+  const screenshot = useScreenshotPaste(setBody);
   const area = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { writeStored(storageKey, body); }, [body, storageKey]);
+  useEffect(() => { writeStored(storageKey, withoutPendingScreenshots(body)); }, [body, storageKey]);
   const options: { value: ReviewEvent; label: string; detail: string; disabled?: boolean }[] = [
     { value: 'COMMENT', label: 'Comment', detail: 'General feedback without a verdict.' },
     { value: 'APPROVE', label: 'Approve', detail: isAuthor ? 'You can’t approve your own pull request.' : 'Ready to merge from your side.', disabled: isAuthor },
@@ -204,7 +208,7 @@ export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }
   ];
   const ready = event === 'APPROVE' || (event === 'REQUEST_CHANGES' ? body.trim().length > 0 : body.trim().length > 0 || drafts.length > 0);
   async function submit() {
-    if (!ready || busy) return;
+    if (!ready || busy || screenshot.isUploading()) return;
     setBusy(true); setError('');
     try { await onSubmit(event, body); setBody(''); setEvent('COMMENT'); setOpen(false); } catch (e) { setError(e instanceof Error ? e.message : 'The review could not be submitted.'); } finally { setBusy(false); }
   }
@@ -214,7 +218,9 @@ export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }
     </PopoverTrigger>
     <PopoverContent positionMethod="fixed" side="bottom" align="end" sideOffset={6} className="w-[380px] gap-3 p-3.5" initialFocus={area}>
       <PopoverTitle className="text-sm font-semibold">Finish your review</PopoverTitle>
-      <Textarea ref={area} value={body} onChange={e => setBody(e.target.value)} placeholder="Leave a summary (optional for approvals)" rows={4} className="min-h-20" onKeyDown={e => submitOnShortcut(e, () => void submit())} />
+      <Textarea ref={area} value={body} onChange={e => setBody(e.target.value)} onPaste={screenshot.onPaste} disabled={busy} placeholder="Leave a summary (optional for approvals)" rows={4} className="min-h-20" onKeyDown={e => submitOnShortcut(e, () => void submit())} />
+      {screenshot.uploading && <p className="comment-hint" role="status">Uploading screenshot to GitHub…</p>}
+      {screenshot.error && <p className="field-error" role="alert">{screenshot.error}</p>}
       <RadioGroup aria-label="Review verdict" value={event} onValueChange={value => setEvent(value as ReviewEvent)} className="gap-0.5">
         {options.map(option => <Label key={option.value} className={`items-start font-normal leading-normal review-option ${option.disabled ? 'is-disabled' : ''}`}>
           <RadioGroupItem value={option.value} disabled={option.disabled} className="mt-0.5" />
@@ -224,7 +230,7 @@ export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }
       {error && <div className="review-error" role="alert"><CircleAlert size={14} />{error}</div>}
       <footer className="review-popup-footer">
         {drafts.length ? <Button variant="ghost" size="xs" onClick={() => { setOpen(false); onShowDrafts(); }}>{drafts.length} pending {drafts.length === 1 ? 'comment' : 'comments'}</Button> : <span>No pending comments</span>}
-        <Button size="sm" onClick={() => void submit()} disabled={!ready || busy}>{busy ? <LoaderCircle className="spinner" /> : <Check />}Submit review</Button>
+        <Button size="sm" onClick={() => void submit()} disabled={!ready || busy || screenshot.uploading}>{busy ? <LoaderCircle className="spinner" /> : <Check />}Submit review</Button>
       </footer>
     </PopoverContent>
   </Popover>;

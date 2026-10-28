@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "outDir": ".verify/screenshot-tests",
+    "rootDir": "."
+  },
+  "include": ["tests/screenshots.test.ts"]
+}

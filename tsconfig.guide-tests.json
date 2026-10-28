@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "outDir": ".verify/guide-tests",
+    "rootDir": "."
+  },
+  "include": ["tests/guide-generation.test.ts"]
+}

@@ -1,7 +1,8 @@
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { guidePrompt, guideSchema, MODEL, normalizeFile, UserError, validateGuide } from './domain.js';
+import { MODEL, normalizeFile, UserError } from './domain.js';
+import { guideGeneration } from './guide-generation.js';
 import { runCommand, type Runner } from './process.js';
 import type { ChangedFile, Guide, PRIdentity, Snapshot } from './types.js';
 function metadata(value: unknown): Record<string, any> {
@@ -52,12 +53,12 @@ export function codexArgs(cwd: string, schemaPath: string, outputPath: string): 
 export async function generateGuide(snapshot: Snapshot, signal: AbortSignal, ignored: readonly string[] = [], runner: Runner = runCommand): Promise<Guide> {
   const directory = await mkdtemp(join(tmpdir(), 'pr-guide-'));
   try {
-    const schema = join(directory, 'schema.json'), output = join(directory, 'guide.json');
-    await writeFile(schema, JSON.stringify(guideSchema), { mode: 0o600 }); signal.throwIfAborted();
-    await runner('codex', codexArgs(directory, schema, output), { signal, cwd: directory, input: guidePrompt(snapshot, ignored), timeoutMs: 8 * 60_000, maxBytes: 2_000_000 });
+    const schema = join(directory, 'schema.json'), output = join(directory, 'guide.json'), generation = guideGeneration(snapshot, ignored);
+    await writeFile(schema, JSON.stringify(generation.schema), { mode: 0o600 }); signal.throwIfAborted();
+    await runner('codex', codexArgs(directory, schema, output), { signal, cwd: directory, input: generation.prompt, timeoutMs: 8 * 60_000, maxBytes: 2_000_000 });
     signal.throwIfAborted();
     let value: unknown;
     try { value = JSON.parse(await readFile(output, 'utf8')); } catch { throw new UserError('Codex did not return a complete JSON guide. Retry; no result was cached.'); }
-    return validateGuide(value, snapshot);
+    return generation.parse(value);
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

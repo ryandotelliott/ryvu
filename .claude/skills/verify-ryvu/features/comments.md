@@ -8,6 +8,7 @@ Open review threads show under their code lines. Display settings switch threads
 - `comments-indicators` replaces inline threads with 32px avatar buttons that open a popover. Unresolved avatars use full opacity; resolved avatars use 40%. The button background appears on hover.
 - `comments-hidden` removes threads from the code.
 - `review-menu` opens the review form and jumps to pending comments. The final Submit review action writes to GitHub.
+- `comment-selection` uses line-number clicks and drags, preserves the side and endpoints in the local draft, and clears the selection after adding the comment. Dragging or double-clicking code selects text for copying without changing comment lines. The comment button stays inside the number gutter.
 
 ## How to get to it (user POV)
 
@@ -27,6 +28,7 @@ Preconditions:
 - **Hidden.** Display settings → radio `Hidden`, Escape. Neither exists. Restore `Inline`.
 - **Review.** `review-sidebar` opens and dismisses Review. `markdown-preview` uses Review → pending comments to reveal a local draft, then deletes it without submitting.
 - **Composer focus.** `persistence` clicks a line's plus button and types without clicking the input, then checks that the pending comment contains the typed text.
+- **Comment ranges.** Run `comment-selection` with `VERIFY_COMMENT_PR=owner/repo/number` and two consecutive patch lines specified by `VERIFY_COMMENT_FILE` and `VERIFY_COMMENT_START`. Choose a location where old and new numbers differ. Cover line-number clicks and drags, normal text selection, and the gutter's plus button in both directions and layouts using the options in `SKILL.md`. The journey checks the rendered label, the copied database's exact coordinates, and selection clearing, then deletes its local draft.
 - **Proof.** Screenshots of the inline thread and indicator mode.
 
 ## Gotchas

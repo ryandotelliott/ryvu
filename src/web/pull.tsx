@@ -178,16 +178,18 @@ export function PullView({ detail, onDetail, view, through, browsing, navigation
   const touched = useMemo(() => new Map<string, RangePull[]>(range ? snapshot.files.map(file => [file.path, range.filter(pull => pull.files.includes(file.path) || (file.previousPath !== null && pull.files.includes(file.previousPath))).reverse()]) : []), [range, snapshot.files]);
   const pull = { repo, number };
   const reviewApi = useMemo<ReviewApi>(() => ({
-    viewer: detail.viewer, author: snapshot.author, threads: conversation.threads, drafts, composer, setComposer,
+    viewer: detail.viewer, author: snapshot.author, repo, threads: conversation.threads, drafts, composer, setComposer,
     addDraft: async (target, body) => {
       const position = 'file' in target ? { side: 'additions' as const, startLine: null, line: null } : { side: target.side, startLine: target.start < target.end ? target.start : null, line: target.end };
       const draft = await addDraft({ data: { ...pull, headSHA: snapshot.headSHA, path: target.path, ...position, body } }); onDetail(d => ({ ...d, drafts: [...d.drafts, draft] }));
+      setSelected(previous => ({ ...previous, [diffView]: null }));
+      document.getSelection()?.removeAllRanges();
     },
     updateDraft: async (id, body) => { const draft = await updateDraft({ data: { id, body } }); onDetail(d => ({ ...d, drafts: d.drafts.map(item => item.id === id ? draft : item) })); },
     deleteDraft: async id => { await deleteDraft({ data: { id } }); onDetail(d => ({ ...d, drafts: d.drafts.filter(item => item.id !== id) })); },
     reply: async (threadId, body) => { const next = await replyToThread({ data: { ...pull, commentId: threadId, body } }); onDetail(d => ({ ...d, conversation: next })); setToast('Reply posted to GitHub'); },
     commentMode: display.comments, focus, setFocus
-  }), [detail.viewer, snapshot, conversation.threads, drafts, composer, display.comments, focus, setFocus]);
+  }), [detail.viewer, snapshot, conversation.threads, drafts, composer, display.comments, focus, setFocus, diffView]);
   async function submitReview(event: ReviewEvent, body: string) {
     const result = await postReview({ data: { ...pull, headSHA: snapshot.headSHA, event, body } });
     onDetail(d => ({ ...d, conversation: result.conversation, drafts: result.drafts }));

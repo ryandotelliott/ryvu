@@ -7,7 +7,7 @@ import { refusal } from './request-policy';
 
 const types: Record<string, string> = { '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
 const scriptHashes = (html: string) => [...html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(match => `'sha256-${createHash('sha256').update(match[1]).digest('base64')}'`);
-const policy = (html: string) => `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' ${scriptHashes(html).join(' ')}; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`;
+const policy = (html: string) => `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' ${scriptHashes(html).join(' ')}; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' data: https:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`;
 
 export async function serve({ fetch, client, port }: { fetch: (request: Request) => Promise<Response>; client: string; port: number }): Promise<void> {
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('PORT must be between 1024 and 65535.');

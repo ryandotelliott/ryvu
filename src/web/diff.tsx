@@ -59,7 +59,12 @@ function labelSeparators(root: ShadowRoot) {
     }
   }
 }
-const unsafeCSS = separatorCSS + `::highlight(pr-find) { background-color: oklch(0.92 0.13 95 / 0.75); color: inherit; } ::highlight(pr-find-current) { background-color: oklch(0.8 0.16 65); color: oklch(0.2 0 0); }
+// Reserve room for the comment button inside the gutter so it cannot intercept code-text drags.
+const unsafeCSS = separatorCSS + `[data-column-number], [data-gutter-buffer] { padding-left: max(2ch, 1lh); }
+[data-gutter-utility-slot] { left: 0; right: auto; }
+[data-utility-button] { margin-right: 0; }
+[data-disable-line-numbers] [data-column-number], [data-disable-line-numbers] [data-gutter-buffer] { min-width: 1lh; }
+::highlight(pr-find) { background-color: oklch(0.92 0.13 95 / 0.75); color: inherit; } ::highlight(pr-find-current) { background-color: oklch(0.8 0.16 65); color: oklch(0.2 0 0); }
 @media (prefers-color-scheme: dark) { ::highlight(pr-find) { background-color: oklch(0.55 0.11 95 / 0.55); } ::highlight(pr-find-current) { background-color: oklch(0.78 0.15 70); color: oklch(0.15 0 0); } }`;
 // Syntax highlighting runs in workers, and only lines near the viewport are in the DOM, so large PRs stay responsive.
 const poolOptions = { workerFactory: () => new DiffsWorker(), poolSize: Math.min(4, Math.max(1, (navigator.hardwareConcurrency ?? 4) - 1)) };
