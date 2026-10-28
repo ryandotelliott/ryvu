@@ -29,7 +29,7 @@ import { RangeOverview } from './range';
 import type { ChangedFile, Chapter, PullDetail, RangePull, ReviewEvent, Snapshot } from '../types';
 
 // Heights of the sticky top bar and the diff toolbar, so scrolled-to content lands below them.
-const topbar = 48, toolbar = 44, initiallyOpen = 12;
+const topbar = 48, toolbar = 44;
 type DiffView = Extract<PullViewName, 'guide' | 'diff'>;
 type LineSelection = { path: string; range: SelectedLineRange };
 const orderKey = 'pr-guide:file-order';
@@ -88,7 +88,7 @@ export function PullView({ detail, onDetail, view, through, browsing, navigation
   const [viewed, setViewed] = useState<string[]>(() => { const stored = readStored<unknown>(viewedKey, []); return Array.isArray(stored) ? stored.filter(path => snapshot.files.some(file => file.path === path)) : []; });
   const [open, setOpen] = useState<Record<DiffView, string[]>>(() => {
     const unread = (paths: string[]) => paths.filter(path => !viewed.includes(path));
-    return { diff: unread(shown.map(file => file.path)).slice(0, initiallyOpen), guide: unread([...new Set(chapters.flatMap(chapter => chapter.files))]) };
+    return { diff: unread(shown.map(file => file.path)), guide: unread([...new Set(chapters.flatMap(chapter => chapter.files))]) };
   });
   const [filter, setFilter] = useState(''), [filterOpen, setFilterOpen] = useState(false), [current, setCurrent] = useState(0);
   const [find, setFind] = useState({ open: false, query: '', index: 0, focus: 0 });

@@ -6,6 +6,13 @@ export default async function (ctx) {
   await ctx.go(`${path}/diff`);
   await ctx.waitForDiffRows();
   ctx.check(await ctx.visibleRows() > 0, 'the first open file draws code rows');
+  ctx.check(await page.locator('.diff-card:not(.expanded)').count() === 0, 'all unreviewed files start expanded');
+  const lastDiff = page.locator('.diff-card').filter({ has: page.locator('diffs-container') }).last();
+  await lastDiff.scrollIntoViewIfNeeded();
+  await lastDiff.locator('diffs-container [data-line]').first().waitFor({ state: 'attached' });
+  ctx.check(await ctx.visibleRows() > 0, 'the last diff draws code when scrolled into view');
+  ctx.check(await page.locator('.diff-card:not(.expanded)').count() === 0, 'scrolling to the last diff keeps every file expanded');
+  await ctx.shot('last-file');
   const reviewed = page.locator('.diff-toolbar > .toolbar-progress');
   ctx.check(new RegExp(`^0/\\d+ reviewed$`).test((await reviewed.innerText()).trim()), `toolbar starts at "${(await reviewed.innerText()).trim()}"`);
 
