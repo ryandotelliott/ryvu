@@ -1,8 +1,8 @@
-import { lazy, memo, Suspense, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { FileDiff, VirtualizerContext, WorkerPoolContextProvider } from '@pierre/diffs/react';
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker';
-import { DEFAULT_VIRTUAL_FILE_METRICS, parsePatchFiles, VirtualizedFileDiff, Virtualizer, type DiffLineAnnotation, type FileDiffOptions, type SelectedLineRange } from '@pierre/diffs';
+import { DEFAULT_VIRTUAL_FILE_METRICS, parsePatchFiles, VirtualizedFileDiff, Virtualizer, type DiffLineAnnotation, type FileDiff as FileDiffRenderer, type FileDiffOptions, type SelectedLineRange } from '@pierre/diffs';
 import { ChevronRight, Code2, Ellipsis, Eye, FileCode2, History, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Annotation, FileComments, type AnnotationData, type CommentData } from './comments';
 import { pullLink } from './links';
 import { hideWhitespace, lineHeightFor, type DisplaySettings } from './display';
-import { codeTheme as theme, commentAnchor, DiffSourceContext, diffPositions, fileAnchor, pageVirtualizer, splitPath, useReview } from './pull-page';
+import { codeTheme as theme, commentAnchor, DiffSourceContext, diffPositions, fileAnchor, pageVirtualizer, scrollPageBy, splitPath, useReview } from './pull-page';
 import { ErrorBoundary, Tip } from './ui';
 import { readFile } from '../pull.functions';
 import type { ChangedFile, DraftComment, CommentThread, RangePull } from '../types';
@@ -60,10 +60,13 @@ function labelSeparators(root: ShadowRoot) {
   }
 }
 // Reserve room for the comment button inside the gutter so it cannot intercept code-text drags.
+// Selection tints use 90% of the renderer's default contribution, for both code and gutter backgrounds.
 const unsafeCSS = separatorCSS + `[data-column-number], [data-gutter-buffer] { padding-left: max(2ch, 1lh); }
 [data-gutter-utility-slot] { left: 0; right: auto; }
 [data-utility-button] { margin-right: 0; }
 [data-disable-line-numbers] [data-column-number], [data-disable-line-numbers] [data-gutter-buffer] { min-width: 1lh; }
+[data-selected-line] { --mix-selection-light: 83.8%; --mix-selection-dark: 77.5%; }
+[data-column-number][data-selected-line], [data-gutter-buffer][data-selected-line] { --mix-selection-light: 77.5%; --mix-selection-dark: 64%; }
 ::highlight(pr-find) { background-color: oklch(0.92 0.13 95 / 0.75); color: inherit; } ::highlight(pr-find-current) { background-color: oklch(0.8 0.16 65); color: oklch(0.2 0 0); }
 @media (prefers-color-scheme: dark) { ::highlight(pr-find) { background-color: oklch(0.55 0.11 95 / 0.55); } ::highlight(pr-find-current) { background-color: oklch(0.78 0.15 70); color: oklch(0.15 0 0); } }`;
 // Syntax highlighting runs in workers, and only lines near the viewport are in the DOM, so large PRs stay responsive.
@@ -93,17 +96,23 @@ const MarkdownPreview = lazy(() => import('./markdown-preview'));
 // `onOpenFile` shows the whole file before or after the change on Files.
 export const DiffCard = memo(function DiffCard({ file, pulls, open, viewed, onToggle, onViewed, display, selectedLines, onSelectionChange, preview, onPreview, onOpenFile }: { file: ChangedFile; pulls?: RangePull[]; open: boolean; viewed: boolean; onToggle: (path: string) => void; onViewed: (path: string, viewed: boolean) => void; display: DisplaySettings; selectedLines: SelectedLineRange | null; onSelectionChange: (path: string, range: SelectedLineRange | null) => void; preview: boolean; onPreview: (path: string, preview: boolean) => void; onOpenFile: (file: ChangedFile, version: 'old' | 'new') => void }) {
   const review = useReview(), source = useContext(DiffSourceContext), { name, directory } = splitPath(file.path);
+  const heading = useRef<HTMLDivElement>(null);
+  // Align the card with its pinned header before removing the body.
+  function anchorCollapse() {
+    const header = heading.current, card = header?.parentElement;
+    if (open && header && card) scrollPageBy(Math.min(0, card.getBoundingClientRect().top - header.getBoundingClientRect().top));
+  }
   // Only open threads still in the diff, on its lines or on the whole file, show on the file, so only those count.
   const commentCount = (review?.threads.filter(thread => thread.path === file.path && !thread.outdated && !thread.resolved).length ?? 0) + (review?.drafts.filter(draft => draft.path === file.path).length ?? 0);
   const commentOnFile = review && (() => { review.setComposer({ path: file.path, file: true }); if (!open) onToggle(file.path); });
   return <article className={`diff-card ${open ? 'expanded' : ''} ${viewed ? 'is-read' : ''}`} id={fileAnchor(file.path)}>
-    <div className="file-heading">
-      <button type="button" className="file-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} ${file.path}`} aria-expanded={open} onClick={() => onToggle(file.path)}><ChevronRight size={13} className="chevron" /><span className="filename">{name}</span><span className="directory">{directory}</span><FileStatus file={file} /></button>
+    <div ref={heading} className="file-heading">
+      <button type="button" className="file-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} ${file.path}`} aria-expanded={open} onClick={() => { anchorCollapse(); onToggle(file.path); }}><ChevronRight size={13} className="chevron" /><span className="filename">{name}</span><span className="directory">{directory}</span><FileStatus file={file} /></button>
       {source && pulls && pulls.length > 0 && <span className="file-pulls">{pulls.map(pull => <Tip key={pull.number} content={`Open this file in #${pull.number}: ${pull.title}`} delay="long"><Link {...pullLink(source.repo, pull.number, 'diff')} hash={fileAnchor(file.path)} className="file-pull">#{pull.number}</Link></Tip>)}</span>}
       {commentCount > 0 && <Tip content={`${commentCount} comment ${commentCount === 1 ? 'thread' : 'threads'}`}><span className="comment-count"><MessageSquare size={12} />{commentCount}</span></Tip>}
       {/\.(md|markdown|mdown|mkd)$/i.test(file.path) && <Tip content={preview ? 'Show diff' : 'Preview Markdown'}><Button variant="ghost" size="icon-sm" aria-label={preview ? 'Show diff' : 'Preview Markdown'} aria-pressed={preview} onClick={() => { onPreview(file.path, !preview); if (!open) onToggle(file.path); }}>{preview ? <Code2 /> : <Eye />}</Button></Tip>}
       <FileCount file={file} />
-      <label className="file-reviewed"><Checkbox aria-label={`Mark ${file.path} as reviewed`} checked={viewed} onCheckedChange={checked => onViewed(file.path, Boolean(checked))} />Reviewed</label>
+      <label className="file-reviewed"><Checkbox aria-label={`Mark ${file.path} as reviewed`} checked={viewed} onCheckedChange={checked => { if (checked) anchorCollapse(); onViewed(file.path, Boolean(checked)); }} />Reviewed</label>
       <FileMenu file={file} onComment={commentOnFile} onOpenFile={onOpenFile} />
     </div>
     {open && <div className="diff-card-body">
@@ -136,6 +145,13 @@ function metadata(item: CommentThread | DraftComment, kind: 'thread' | 'draft'):
 
 function Diff({ file, display, selectedLines, onSelectionChange }: { file: ChangedFile; display: DisplaySettings; selectedLines: SelectedLineRange | null; onSelectionChange: (path: string, range: SelectedLineRange | null) => void }) {
   const review = useReview();
+  const renderer = useRef<FileDiffRenderer<AnnotationData>>(null), selection = useRef(selectedLines);
+  // The React selectedLines prop omits activeLineSide, which makes split ranges highlight both columns.
+  const syncSelection = useCallback((range: SelectedLineRange | null) => {
+    selection.current = range;
+    renderer.current?.setSelectedLines(range, { activeLineSide: range?.side });
+  }, []);
+  useLayoutEffect(() => syncSelection(selectedLines), [selectedLines, syncSelection]);
   const { parsed, onlyWhitespace } = useMemo(() => {
     if (!file.patch) return { parsed: null, onlyWhitespace: false };
     const body = display.whitespace === 'hide' ? hideWhitespace(file.patch) : { patch: file.patch, onlyWhitespace: false };
@@ -173,10 +189,16 @@ function Diff({ file, display, selectedLines, onSelectionChange }: { file: Chang
   const options = useMemo<FileDiffOptions<AnnotationData, undefined>>(() => ({
     theme, themeType: 'system', unsafeCSS, diffStyle: display.layout, overflow: display.wrap ? 'wrap' : 'scroll', disableLineNumbers: !display.lineNumbers, lineDiffType: display.wordDiff ? 'word' : 'none', disableFileHeader: true, enableLineSelection: true,
     onPostRender: (node, instance, phase) => {
-      if (phase === 'unmount') diffPositions.delete(node);
-      else if (instance instanceof VirtualizedFileDiff) diffPositions.set(node, instance);
+      if (phase === 'unmount') { diffPositions.delete(node); renderer.current = null; }
+      else {
+        renderer.current = instance;
+        syncSelection(selection.current);
+        if (instance instanceof VirtualizedFileDiff) diffPositions.set(node, instance);
+      }
     },
-    onLineSelectionEnd: (range: SelectedLineRange | null) => onSelectionChange(file.path, range),
+    onLineSelectionStart: syncSelection,
+    onLineSelectionChange: syncSelection,
+    onLineSelectionEnd: (range: SelectedLineRange | null) => { syncSelection(range); onSelectionChange(file.path, range); },
     enableGutterUtility: Boolean(setComposer), hunkSeparators: 'line-info', expansionLineCount,
     // Expanding a hunk fetches both versions of the file once; until then only the patch is shown.
     loadDiffFiles: source ? async () => {
@@ -189,7 +211,7 @@ function Diff({ file, display, selectedLines, onSelectionChange }: { file: Chang
       const side = range.endSide ?? range.side ?? 'additions', sameSide = (range.side ?? side) === side;
       setComposer({ path: file.path, side, start: sameSide ? Math.min(range.start, range.end) : range.end, end: sameSide ? Math.max(range.start, range.end) : range.end });
     }
-  }), [display, setComposer, file.path, source, onSelectionChange]);
+  }), [display, setComposer, file.path, source, onSelectionChange, syncSelection]);
   const size = { font: display.fontSize, line: lineHeightFor(display.fontSize) }, metrics = useMemo(() => ({ ...DEFAULT_VIRTUAL_FILE_METRICS, lineHeight: size.line, diffHeaderHeight: 0, spacing: 0, paddingTop: 0, paddingBottom: 0 }), [size.line]);
   const view = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -201,9 +223,20 @@ function Diff({ file, display, selectedLines, onSelectionChange }: { file: Chang
     return () => observer.disconnect();
   }, [parsed]);
   if (!parsed) return <div className="missing">No text patch was supplied for this file. Open the PR on GitHub to inspect it.</div>;
-  return <div className="diff-view" ref={view} style={{ '--diffs-font-size': `${size.font}px`, '--diffs-line-height': `${size.line}px` } as CSSProperties}>
+  return <div className="diff-view" ref={view} style={{ '--diffs-font-size': `${size.font}px`, '--diffs-line-height': `${size.line}px` } as CSSProperties} onPointerDownCapture={event => {
+    if (event.button !== 0) return;
+    const path = event.nativeEvent.composedPath().filter((node): node is Element => node instanceof Element);
+    const column = path.find(node => node.matches('[data-code]'));
+    const side = column?.hasAttribute('data-deletions') ? 'deletions' : column?.hasAttribute('data-additions') ? 'additions' : null;
+    // The renderer toggles repeated line numbers without comparing their sides.
+    if (!event.shiftKey && side && selection.current?.side !== side && path.some(node => node.matches('[data-column-number]'))) syncSelection(null);
+    if (path.some(node => node.matches('[data-content]')) && !path.some(node => node.matches('[data-line-annotation], [data-separator]'))) {
+      syncSelection(null);
+      onSelectionChange(file.path, null);
+    }
+  }}>
     {onlyWhitespace && <div className="diff-note">Only whitespace changed in this file.</div>}
-    <FileDiff<AnnotationData> fileDiff={parsed} lineAnnotations={annotations} renderAnnotation={renderAnnotation} options={options} metrics={metrics} selectedLines={selectedLines} />
+    <FileDiff<AnnotationData> fileDiff={parsed} lineAnnotations={annotations} renderAnnotation={renderAnnotation} options={options} metrics={metrics} />
   </div>;
 }
 const renderAnnotation = (annotation: DiffLineAnnotation<AnnotationData>) => annotation.metadata ? <Annotation data={annotation.metadata} /> : null;

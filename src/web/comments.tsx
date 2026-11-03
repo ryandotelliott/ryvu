@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Check, ChevronDown, ChevronRight, CircleAlert, CornerDownRight, FileCode2, GitPullRequest, LoaderCircle, MessageSquare, Pencil, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, CornerDownRight, LoaderCircle, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
@@ -8,13 +8,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { agoLong, readStored, useNow, writeStored } from './browser-state';
-import { Avatar, focusOnKeyboardOpen, Kbd, Segmented, Tip } from './ui';
+import { plainText } from './activity-items';
+import { Avatar, focusOnKeyboardOpen, Kbd, Tip } from './ui';
 import { Markdown } from './markdown';
 import { useScreenshotPaste, withoutPendingScreenshots } from './screenshot-paste';
 import { commentAnchor, useReview } from './pull-page';
 import { commandKey } from './shell';
 import type { CommentMode } from './display';
-import type { CommentThread, Conversation as ConversationData, DiffSide, DraftComment, ReviewComment, ReviewEvent } from '../types';
+import type { CommentThread, DiffSide, DraftComment, ReviewComment, ReviewEvent } from '../types';
 
 // A comment on lines of a diff, or on the whole file.
 export type ComposerTarget = { path: string; side: DiffSide; start: number; end: number } | { path: string; file: true };
@@ -32,7 +33,6 @@ export type ReviewApi = {
 export type CommentData = { kind: 'thread'; thread: CommentThread } | { kind: 'draft'; draft: DraftComment };
 // Indicators group every comment on one line into a single marker.
 export type AnnotationData = CommentData | { kind: 'group'; items: CommentData[] } | { kind: 'composer'; target: ComposerTarget };
-const plainText = (markdown: string) => markdown.split('\n').map(line => line.replace(/<[^>]+>|[`*_>#~]|!?\[([^\]]*)\]\([^)]*\)/g, '$1').trim()).find(Boolean) ?? '';
 function commentSummary(data: CommentData) {
   if (data.kind === 'draft') return { author: '', text: plainText(data.draft.body), count: 1, line: data.draft.line === null ? 'this file' : lineLabel(data.draft.startLine, data.draft.line), pending: true, resolved: false, outdated: false };
   const { thread } = data, first = thread.comments[0], outdated = thread.outdated;
@@ -47,7 +47,8 @@ function submitOnShortcut(event: KeyboardEvent, submit: () => void, cancel?: () 
 }
 
 // A textarea with submit/cancel that reports failures inline.
-function Editor({ initial = '', placeholder, submitLabel, onSubmit, onCancel, autoFocus = true }: { initial?: string; placeholder: string; submitLabel: string; onSubmit: (body: string) => Promise<void>; onCancel?: () => void; autoFocus?: boolean }) {
+// `bare` drops the field's own border and ring for an editor that is the whole card, such as the composer.
+function Editor({ initial = '', placeholder, submitLabel, onSubmit, onCancel, autoFocus = true, bare = false }: { initial?: string; placeholder: string; submitLabel: string; onSubmit: (body: string) => Promise<void>; onCancel?: () => void; autoFocus?: boolean; bare?: boolean }) {
   const [body, setBody] = useState(initial), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const screenshot = useScreenshotPaste(setBody);
   async function submit() {
@@ -56,7 +57,7 @@ function Editor({ initial = '', placeholder, submitLabel, onSubmit, onCancel, au
     try { await onSubmit(body); setBody(''); } catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong.'); } finally { setBusy(false); }
   }
   return <div className="comment-editor">
-    <Textarea value={body} onChange={e => setBody(e.target.value)} onPaste={screenshot.onPaste} disabled={busy} placeholder={placeholder} autoFocus={autoFocus} rows={3} className="min-h-20 bg-card" onKeyDown={e => submitOnShortcut(e, () => void submit(), onCancel)} />
+    <Textarea value={body} onChange={e => setBody(e.target.value)} onPaste={screenshot.onPaste} disabled={busy} placeholder={placeholder} autoFocus={autoFocus} rows={3} className={bare ? 'min-h-16 resize-none rounded-none border-0 bg-transparent p-0 text-[13px] shadow-none focus-visible:ring-0 md:text-[13px] dark:bg-transparent' : 'min-h-20 bg-card text-[13px] md:text-[13px]'} onKeyDown={e => submitOnShortcut(e, () => void submit(), onCancel)} />
     {screenshot.uploading && <p className="comment-hint" role="status">Uploading screenshot to GitHub…</p>}
     {(error || screenshot.error) && <p className="field-error" role="alert">{error || screenshot.error}</p>}
     <div className="comment-editor-actions">
@@ -67,17 +68,18 @@ function Editor({ initial = '', placeholder, submitLabel, onSubmit, onCancel, au
   </div>;
 }
 
-function CommentBody({ comment, now }: { comment: ReviewComment; now: number }) {
+function CommentBody({ comment, now, head = true }: { comment: ReviewComment; now: number; head?: boolean }) {
   return <div className="comment">
-    <div className="comment-head"><Avatar login={comment.author} size={20} /><strong>{comment.author}</strong><Tip content={new Date(comment.createdAt).toLocaleString()} delay="long"><a href={comment.url} target="_blank" rel="noreferrer">{agoLong(comment.createdAt, now)}</a></Tip></div>
+    {head && <div className="comment-head"><Avatar login={comment.author} size={20} /><strong>{comment.author}</strong><Tip content={new Date(comment.createdAt).toLocaleString()} delay="long"><a href={comment.url} target="_blank" rel="noreferrer">{agoLong(comment.createdAt, now)}</a></Tip></div>}
     <Markdown className="comment-text" text={comment.body} />
   </div>;
 }
 
-export function ThreadView({ thread, compact }: { thread: CommentThread; compact?: boolean }) {
+// `hideFirstHead` leaves the first comment's author and time to a header around the thread.
+export function ThreadView({ thread, compact, hideFirstHead }: { thread: CommentThread; compact?: boolean; hideFirstHead?: boolean }) {
   const review = useReview(), now = useNow(), [replying, setReplying] = useState(false);
   return <div className={`thread ${compact ? 'compact' : ''}`}>
-    {thread.comments.map(comment => <CommentBody key={comment.id} comment={comment} now={now} />)}
+    {thread.comments.map((comment, index) => <CommentBody key={comment.id} comment={comment} now={now} head={!(hideFirstHead && index === 0)} />)}
     {review && (replying
       ? <Editor placeholder="Reply… (posts to GitHub right away)" submitLabel="Reply" onCancel={() => setReplying(false)} onSubmit={async body => { await review.reply(thread.id, body); setReplying(false); }} />
       : <Button variant="ghost" size="xs" className="self-start text-muted-foreground" onClick={() => setReplying(true)}><CornerDownRight size={13} />Reply</Button>)}
@@ -102,7 +104,7 @@ function Composer({ target }: { target: ComposerTarget }) {
   useEffect(() => { container.current?.querySelector('textarea')?.focus({ preventScroll: true }); }, [target]);
   return <div className="thread composer" ref={container}>
     <div className="composer-label">Comment on {'file' in target ? 'this file' : lineLabel(target.start < target.end ? target.start : null, target.end)}</div>
-    <Editor placeholder="Leave a comment" submitLabel="Add to review" onCancel={() => review.setComposer(null)} onSubmit={async body => { await review.addDraft(target, body); review.setComposer(null); }} />
+    <Editor bare placeholder="Leave a comment" submitLabel="Add to review" onCancel={() => review.setComposer(null)} onSubmit={async body => { await review.addDraft(target, body); review.setComposer(null); }} />
   </div>;
 }
 
@@ -157,42 +159,6 @@ export function Annotation({ data }: { data: AnnotationData }) {
   return <div className="annotation" data-comment-anchor={commentAnchor(data)}><CollapsibleComment data={data} /></div>;
 }
 
-const reviewStates: Record<string, { label: string; chip: string; tone: string; icon: ReactNode }> = {
-  APPROVED: { label: 'approved these changes', chip: 'Approved', tone: 'approved', icon: <Check size={12} /> },
-  CHANGES_REQUESTED: { label: 'requested changes', chip: 'Changes requested', tone: 'changes', icon: <X size={12} /> },
-  COMMENTED: { label: 'reviewed', chip: 'Reviewed', tone: 'commented', icon: <MessageSquare size={12} /> },
-  DISMISSED: { label: 'left a dismissed review', chip: 'Dismissed', tone: 'commented', icon: <MessageSquare size={12} /> }
-};
-type Order = 'oldest' | 'newest';
-const orderKey = 'pr-guide:conversation-order';
-function ActivityEvent({ icon, at, now, children }: { icon: ReactNode; at: string; now: number; children: ReactNode }) {
-  return <div className="activity-event">{icon}<span>{children}{at && <> · <Tip content={new Date(at).toLocaleString()} delay="long"><time dateTime={at}>{agoLong(at, now)}</time></Tip></>}</span></div>;
-}
-// The PR's activity: when it was opened, reviews, conversation comments and threads whose lines are no longer in the diff.
-// Messages are cards; reviews without a summary are single event lines.
-export function Activity({ conversation, opened, onFile }: { conversation: ConversationData; opened: { author: string; at: string; commits: number }; onFile: (path: string) => void }) {
-  const now = useNow(), [order, setOrder] = useState<Order>(() => readStored<unknown>(orderKey, 'oldest') === 'newest' ? 'newest' : 'oldest');
-  useEffect(() => { writeStored(orderKey, order); }, [order]);
-  const items: { at: string; key: string; node: ReactNode }[] = [
-    { at: opened.at, key: 'opened', node: <ActivityEvent icon={<GitPullRequest size={14} className="text-(--success)" />} at={opened.at} now={now}><strong>{opened.author}</strong> opened this pull request{opened.commits ? ` with ${opened.commits} ${opened.commits === 1 ? 'commit' : 'commits'}` : ''}</ActivityEvent> },
-    ...conversation.reviews.map(review => { const state = reviewStates[review.state]; return { at: review.submittedAt, key: `review-${review.id}`, node: review.body.trim()
-      ? <article className="activity-card"><div className="comment">
-          <div className="comment-head"><Avatar login={review.author} size={20} /><strong>{review.author}</strong><Tip content={new Date(review.submittedAt).toLocaleString()} delay="long"><a href={review.url} target="_blank" rel="noreferrer">{agoLong(review.submittedAt, now)}</a></Tip><span className={`review-chip ${state.tone}`}>{state.icon}{state.chip}</span></div>
-          <Markdown className="comment-text" text={review.body} />
-        </div></article>
-      : <ActivityEvent icon={<span className={`review-state ${state.tone}`}>{state.icon}</span>} at={review.submittedAt} now={now}><strong>{review.author}</strong> <span className={`review-state ${state.tone}`}>{state.label}</span></ActivityEvent> }; }),
-    ...conversation.comments.map(comment => ({ at: comment.createdAt, key: `comment-${comment.id}`, node: <article className="activity-card"><CommentBody comment={comment} now={now} /></article> })),
-    ...conversation.threads.filter(thread => thread.outdated).map(thread => ({ at: thread.comments[0].createdAt, key: `thread-${thread.id}`, node: <article className="activity-card" id={`activity-thread-${thread.id}`}>
-      <button type="button" className="timeline-file" onClick={() => onFile(thread.path)}><FileCode2 size={12} />{thread.path}{thread.originalLine ? `:${thread.originalLine}` : ''}<span className="outdated-chip">Outdated</span></button>
-      <ThreadView thread={thread} compact />
-    </article> }))
-  ].sort((a, b) => order === 'oldest' ? a.at.localeCompare(b.at) : b.at.localeCompare(a.at));
-  return <section className="activity" aria-label="Activity">
-    <div className="activity-bar"><h3>Activity</h3>{items.length > 2 && <Segmented label="Order" value={order} onChange={setOrder} options={[{ value: 'oldest', label: 'Oldest first' }, { value: 'newest', label: 'Newest first' }]} />}</div>
-    {items.map(item => <div key={item.key} className="activity-item">{item.node}</div>)}
-  </section>;
-}
-
 // "Finish your review": summary, verdict and the pending comments, submitted together.
 export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }: { pullKey: string; drafts: DraftComment[]; isAuthor: boolean; onSubmit: (event: ReviewEvent, body: string) => Promise<void>; onShowDrafts: () => void }) {
   const storageKey = `pr-guide:review-draft:${pullKey}`;
@@ -213,7 +179,7 @@ export function ReviewMenu({ pullKey, drafts, isAuthor, onSubmit, onShowDrafts }
     try { await onSubmit(event, body); setBody(''); setEvent('COMMENT'); setOpen(false); } catch (e) { setError(e instanceof Error ? e.message : 'The review could not be submitted.'); } finally { setBusy(false); }
   }
   return <Popover open={open} onOpenChange={setOpen}>
-    <PopoverTrigger render={<Button size="sm" aria-label="Review" />}>
+    <PopoverTrigger render={<Button size="sm" className="data-popup-open:bg-primary/80" aria-label="Review" />}>
       Review{drafts.length > 0 && <span className="review-count">{drafts.length}</span>}<ChevronDown size={12} />
     </PopoverTrigger>
     <PopoverContent positionMethod="fixed" side="bottom" align="end" sideOffset={6} className="w-[380px] gap-3 p-3.5" initialFocus={area}>

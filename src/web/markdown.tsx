@@ -1,9 +1,11 @@
-import { type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
+import { LoaderCircle } from 'lucide-react';
+import { renderMarkdownDiagram } from './markdown-rendering';
 import { Screenshot } from './screenshot';
 
 // Compact inline formatting for headings, summaries and file labels.
@@ -31,12 +33,35 @@ export function inline(text: string): ReactNode[] {
   if (last < text.length) out.push(text.slice(last));
   return out;
 }
+function subscribeTheme(onChange: () => void) {
+  const query = window.matchMedia('(prefers-color-scheme: dark)');
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+export function MermaidBlock({ code }: { code: string }) {
+  const dark = useSyncExternalStore(subscribeTheme, () => window.matchMedia('(prefers-color-scheme: dark)').matches, () => false);
+  const id = useId().replace(/[^a-zA-Z0-9_-]/g, ''), generation = useRef(0);
+  const [result, setResult] = useState<{ status: 'loading' } | { status: 'ready'; svg: string } | { status: 'error'; message: string }>({ status: 'loading' });
+  useEffect(() => {
+    let active = true;
+    setResult({ status: 'loading' });
+    void renderMarkdownDiagram(code, `mermaid-${id}-${++generation.current}`, dark).then(
+      svg => { if (active) setResult({ status: 'ready', svg }); },
+      error => { if (active) setResult({ status: 'error', message: error instanceof Error ? error.message : 'Please try again.' }); }
+    );
+    return () => { active = false; };
+  }, [code, id, dark]);
+  if (result.status === 'loading') return <div className="markdown-preview-status" role="status"><LoaderCircle size={14} className="spinner" />Rendering diagram…</div>;
+  if (result.status === 'error') return <div className="mermaid-error"><p role="alert">This Mermaid diagram could not be rendered. {result.message}</p><pre><code>{code}</code></pre></div>;
+  return <figure className="mermaid-diagram" aria-label="Mermaid diagram" dangerouslySetInnerHTML={{ __html: result.svg }} />;
+}
 const CodeBlock: NonNullable<Components['pre']> = ({ node, children }) => {
   const code = node?.children[0];
   if (code?.type !== 'element' || code.tagName !== 'code') return <pre>{children}</pre>;
   const classes = code.properties.className;
-  if (!Array.isArray(classes) || !classes.includes('language-diff')) return <pre>{children}</pre>;
   const text = code.children.flatMap(child => child.type === 'text' ? [child.value] : []).join('');
+  if (Array.isArray(classes) && classes.includes('language-mermaid')) return <MermaidBlock code={text.replace(/\n$/, '')} />;
+  if (!Array.isArray(classes) || !classes.includes('language-diff')) return <pre>{children}</pre>;
   return <pre><code>{text.split('\n').map((line, index, lines) => <span key={index} className={line.startsWith('+') ? 'md-add' : line.startsWith('-') ? 'md-del' : undefined}>{line}{index < lines.length - 1 ? '\n' : ''}</span>)}</code></pre>;
 };
 const components: Components = {

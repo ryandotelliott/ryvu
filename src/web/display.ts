@@ -24,6 +24,23 @@ export function useDisplay(): [DisplaySettings, (patch: Partial<DisplaySettings>
   return [display, update, reset];
 }
 
+// How the Overview's activity reads: its order, how resolved threads and bot comments show, and whether commits are listed.
+export type Visibility = 'visible' | 'collapsed' | 'hidden';
+export type ActivityDisplay = { order: 'oldest' | 'newest'; resolved: Visibility; bots: Visibility; commits: boolean };
+const activityKey = 'pr-guide:activity-display';
+function readActivityDisplay(): ActivityDisplay {
+  const stored = readStored<Partial<ActivityDisplay>>(activityKey, {});
+  const visibility = (value: unknown, fallback: Visibility): Visibility => value === 'visible' || value === 'collapsed' || value === 'hidden' ? value : fallback;
+  // Earlier versions stored only the order, under its own key.
+  const order = stored.order ?? readStored<unknown>('pr-guide:conversation-order', 'oldest');
+  return { order: order === 'newest' ? 'newest' : 'oldest', resolved: visibility(stored.resolved, 'collapsed'), bots: visibility(stored.bots, 'visible'), commits: stored.commits === true };
+}
+export function useActivityDisplay(): [ActivityDisplay, (patch: Partial<ActivityDisplay>) => void] {
+  const [display, setDisplay] = useState<ActivityDisplay>(readActivityDisplay);
+  const update = (patch: Partial<ActivityDisplay>) => setDisplay(previous => { const next = { ...previous, ...patch }; writeStored(activityKey, next); return next; });
+  return [display, update];
+}
+
 const MAX_PAIRS = 250_000;
 // Turns removed/added line pairs that differ only in whitespace into context lines.
 // Each pair becomes one context line, so hunk header counts stay valid.

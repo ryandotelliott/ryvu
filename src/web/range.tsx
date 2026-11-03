@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router';
-import { ChevronDown } from 'lucide-react';
 import { pullLink } from './links';
-import { Markdown } from './markdown';
+import { Description } from './description';
 import { rangeLabel } from './pull-page';
 import { Avatar, PullIcon } from './ui';
 import type { RangePull } from '../types';
@@ -27,10 +26,7 @@ export function RangeOverview({ repo, pulls }: { repo: string; pulls: RangePull[
           {pull.baseRef && pull.headRef && <><span className="meta-separator">·</span><span className="branches"><code>{pull.baseRef}</code>←<code>{pull.headRef}</code></span></>}
           <span className="meta-separator">·</span><span className="added">+{pull.additions.toLocaleString()}</span><span className="removed">−{pull.deletions.toLocaleString()}</span>
         </div>
-        <details className="description" open>
-          <summary>Description<ChevronDown size={12} className="chevron" /></summary>
-          {pull.body.trim() ? <Markdown className="description-text" text={pull.body} /> : <p className="description-text is-empty">No description provided.</p>}
-        </details>
+        <Description body={pull.body} />
       </section>)}
     </div>
   </div>;

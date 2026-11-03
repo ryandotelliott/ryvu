@@ -16,6 +16,7 @@ The Diff page shows every changed file as a card with syntax-highlighted code. T
 - `sidebar-jump` scrolls to a file, landing its card at 108px, and marks it current.
 - `sticky-header` pins the current file's header 16px below the toolbar, with no code showing around it even mid-scroll.
 - `reviewed` ticks a file reviewed and updates `N/M reviewed`; unchecking it reopens the file in the current view.
+- `collapse-scroll` keeps the file header in place when Reviewed or the collapse arrow closes a file. `journeys/collapse-scroll.mjs` checks pinned headers and headers in normal flow on Diff and Guide.
 - `markdown-preview` switches a Markdown file between its diff and the full rendered file, with Mermaid diagrams and highlighted fenced code. Deleted files preview the base version.
 
 ## How to get to it (user POV)

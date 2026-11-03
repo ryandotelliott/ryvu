@@ -48,10 +48,10 @@ export async function fetchConversation(identity: PRIdentity, signal: AbortSigna
   return { threads: [...threads.values()], reviews: summaries, comments: issue.map(comment) };
 }
 
-const STATUS = 'query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { mergeStateStatus commits(last: 1) { totalCount nodes { commit { statusCheckRollup { state } } } } reviewRequests(first: 25) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { name } ... on Bot { login } ... on Mannequin { login } } } } } } }';
+const STATUS = 'query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { mergeStateStatus commits(last: 1) { totalCount nodes { commit { statusCheckRollup { state } } } } history: commits(last: 100) { nodes { commit { oid messageHeadline committedDate author { name user { login } } } } } reviewRequests(first: 25) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { name } ... on Bot { login } ... on Mannequin { login } } } } } } }';
 const MERGE: Record<string, PullStatus['merge']> = { BEHIND: 'behind', DIRTY: 'conflicts', BLOCKED: 'blocked', UNSTABLE: 'unstable', CLEAN: 'clean', HAS_HOOKS: 'clean' };
 const CHECKS: Record<string, PullStatus['checks']> = { SUCCESS: 'success', FAILURE: 'failure', ERROR: 'failure', PENDING: 'pending', EXPECTED: 'pending' };
-// Requested reviewers, the check rollup and how the branch stands against its base. Read-only.
+// Requested reviewers, the check rollup, how the branch stands against its base and the last 100 commits. Read-only.
 export async function fetchStatus(identity: PRIdentity, signal: AbortSignal, runner: Runner = runCommand): Promise<PullStatus> {
   const output = await runner('gh', ['api', 'graphql', '-f', `query=${STATUS}`, '-f', `owner=${identity.owner}`, '-f', `name=${identity.repo}`, '-F', `number=${identity.number}`], { signal });
   const pull = JSON.parse(output)?.data?.repository?.pullRequest;
@@ -61,7 +61,9 @@ export async function fetchStatus(identity: PRIdentity, signal: AbortSignal, run
     requested: nodes.map(node => node?.requestedReviewer).filter(Boolean).map(reviewer => ({ name: String(reviewer.login ?? reviewer.name ?? 'unknown'), team: reviewer.__typename === 'Team' })),
     checks: CHECKS[pull.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state] ?? null,
     merge: MERGE[pull.mergeStateStatus] ?? null,
-    commits: Number(pull.commits?.totalCount) || 0
+    commits: Number(pull.commits?.totalCount) || 0,
+    history: (Array.isArray(pull.history?.nodes) ? pull.history.nodes : []).map((node: Record<string, any>) => node?.commit).filter(Boolean)
+      .map((commit: Record<string, any>) => ({ sha: String(commit.oid ?? ''), message: String(commit.messageHeadline ?? ''), author: String(commit.author?.user?.login ?? commit.author?.name ?? 'unknown'), at: String(commit.committedDate ?? '') }))
   };
 }
 

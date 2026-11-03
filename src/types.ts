@@ -32,7 +32,8 @@ export type Conversation = { threads: CommentThread[]; reviews: ReviewSummary[];
 export type DraftComment = { id: string; path: string; side: DiffSide; startLine: number | null; line: number | null; body: string; headSHA: string; createdAt: string };
 export type PriorGuide = { headSHA: string; generatedAt: string };
 // Live review state beside the description. It changes without new commits, so it is never stored with a guide.
-export type PullStatus = { requested: { name: string; team: boolean }[]; checks: 'success' | 'failure' | 'pending' | null; merge: 'behind' | 'conflicts' | 'blocked' | 'unstable' | 'clean' | null; commits: number };
+export type PullStatus = { requested: { name: string; team: boolean }[]; checks: 'success' | 'failure' | 'pending' | null; merge: 'behind' | 'conflicts' | 'blocked' | 'unstable' | 'clean' | null; commits: number; history: PullCommit[] };
+export type PullCommit = { sha: string; message: string; author: string; at: string };
 export type StackedPull = { number: number; title: string; state: 'open' | 'closed' | 'merged'; draft: boolean; additions: number; deletions: number; checks: PullStatus['checks'] };
 // PRs that build on each other, from GitHub's stacked pull requests. `pulls` runs from the top of the stack down to the PR that merges into `base`.
 export type PullStack = { base: string; pulls: StackedPull[] };

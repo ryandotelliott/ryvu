@@ -37,7 +37,7 @@ export function ReviewLayout({ navigation, repo, number, through = null, title, 
         <ShowSidebar />
         {title && stack ? <StackMenu repo={repo} number={number} through={through} title={title} stack={stack} view={view} />
           : title && !through ? <Tip content={`${repo} #${number}: ${title}`} delay="long" side="bottom">{caption}</Tip> : caption}
-        <nav className="view-tabs" aria-label="View">{pullViews.map(([name, label], i) => through && name === 'guide'
+        <nav className="view-tabs" aria-label="View">{pullViews.filter(([name]) => name !== 'files').map(([name, label], i) => through && name === 'guide'
           ? <Tip key={name} content="Guides cover one pull request at a time. Open one from the stack to read its guide." side="bottom"><span className="is-disabled" aria-disabled="true">{label}</span></Tip>
           : <Tip key={name} content={label} hotkey={String(i + 1)} delay="long" side="bottom"><Link {...pullLink(repo, number, name, { through })} className={view === name ? 'is-active' : ''} aria-current={view === name ? 'page' : undefined}>{label}{name === 'guide' && analyzing && <LoaderCircle size={12} className="spinner" />}</Link></Tip>)}</nav>
         <div className="topbar-actions">

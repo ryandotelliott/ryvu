@@ -1,4 +1,4 @@
-import { useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkFrontmatter from 'remark-frontmatter';
@@ -7,34 +7,12 @@ import { LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { readFile } from '../pull.functions';
 import { DiffSourceContext, fileAnchor } from './pull-page';
-import { highlightMarkdownCode, renderMarkdownDiagram } from './markdown-rendering';
+import { highlightMarkdownCode } from './markdown-rendering';
+import { MermaidBlock } from './markdown';
 import type { ChangedFile } from '../types';
 
 type Loaded<T> = { status: 'loading' } | { status: 'ready'; value: T } | { status: 'error'; message: string };
 const message = (error: unknown) => error instanceof Error ? error.message : 'Please try again.';
-function subscribeTheme(onChange: () => void) {
-  const query = window.matchMedia('(prefers-color-scheme: dark)');
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-}
-
-function MermaidBlock({ code }: { code: string }) {
-  const dark = useSyncExternalStore(subscribeTheme, () => window.matchMedia('(prefers-color-scheme: dark)').matches, () => false);
-  const id = useId().replace(/[^a-zA-Z0-9_-]/g, ''), generation = useRef(0);
-  const [result, setResult] = useState<Loaded<string>>({ status: 'loading' });
-  useEffect(() => {
-    let active = true;
-    setResult({ status: 'loading' });
-    void renderMarkdownDiagram(code, `mermaid-${id}-${++generation.current}`, dark).then(
-      value => { if (active) setResult({ status: 'ready', value }); },
-      error => { if (active) setResult({ status: 'error', message: message(error) }); }
-    );
-    return () => { active = false; };
-  }, [code, id, dark]);
-  if (result.status === 'loading') return <div className="markdown-preview-status" role="status"><LoaderCircle size={14} className="spinner" />Rendering diagram…</div>;
-  if (result.status === 'error') return <div className="mermaid-error"><p role="alert">This Mermaid diagram could not be rendered. {result.message}</p><pre><code>{code}</code></pre></div>;
-  return <figure className="mermaid-diagram" aria-label="Mermaid diagram" dangerouslySetInnerHTML={{ __html: result.value }} />;
-}
 function HighlightedCode({ code, language }: { code: string; language: string }) {
   const [html, setHtml] = useState<string | null>(null);
   useEffect(() => {

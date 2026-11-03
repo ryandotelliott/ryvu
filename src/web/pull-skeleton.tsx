@@ -46,9 +46,9 @@ export function PullSkeleton({ target, pull, navigation }: { target: PullTarget;
     actions={!target.through && <Button size="sm" disabled>Review<ChevronDown size={12} /></Button>}
   >
     {target.view === 'overview' ? <div className="overview-layout">
+      <div className="overview-head">{heading}</div>
       <div className="overview-main">
-        {heading}
-        <details className="description" open><summary>Description<ChevronDown size={12} className="chevron" /></summary><div className="description-text"><TextLines widths={['w-full', 'w-full', 'w-11/12', 'w-2/3']} /></div></details>
+        <div className="description-text"><TextLines widths={['w-full', 'w-full', 'w-11/12', 'w-2/3']} /></div>
       </div>
       <aside className="overview-side" aria-label="Details">{['Status', 'Reviewers', 'Checks', 'Branch'].map(label => <section key={label}><h4>{label}</h4><div className="side-row"><Skeleton className="size-4" /><Skeleton className="h-3 w-28" /></div></section>)}<Skeleton className="h-3 w-36" /></aside>
     </div>
@@ -67,6 +67,7 @@ export function PullSkeleton({ target, pull, navigation }: { target: PullTarget;
         </section> : <div className="analyze-empty"><Skeleton className="h-[27px] w-60 max-w-full" /><div className="w-full text-[13.5px] leading-[1.6]"><TextLines widths={['w-full', 'w-full', 'w-full', 'w-full', 'w-4/5']} /></div><Skeleton className="h-8 w-20" /></div>}
       </div>
         : <div className="diff-page">
+          {!target.through && <div className="diff-head">{heading}</div>}
           <div className="diff-toolbar"><div className="toolbar-stat"><Skeleton className="h-3 w-10" /><Skeleton className="h-3 w-10" /></div><Skeleton className="h-3 w-24" /><div className="toolbar-actions"><Skeleton className="h-3 w-20" /><Button variant="ghost" size="icon-sm" aria-label="Display settings" disabled><SlidersHorizontal /></Button></div></div>
           <div className="diff-body"><div className="diff-panel"><FileSkeleton /></div></div>
         </div>}

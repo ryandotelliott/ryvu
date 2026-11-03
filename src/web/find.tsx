@@ -91,13 +91,51 @@ export function scrollToMatch(match: FindMatch, offset: number) {
   return () => cancelAnimationFrame(frame);
 }
 
-export function FindBar({ query, onQuery, count, current, onStep, onClose, focusKey }: { query: string; onQuery: (query: string) => void; count: number; current: number; onStep: (direction: 1 | -1) => void; onClose: () => void; focusKey: number }) {
+// Every case-insensitive occurrence of `query` in the text under `root`, in page order. Folded cards keep their text in
+// the page, so their matches count too; a match split across formatting, such as `foo **bar**`, is not found.
+export function findText(root: Element, query: string): Range[] {
+  const needle = query.toLowerCase(), ranges: Range[] = [];
+  if (!needle) return ranges;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: node => node.parentElement?.closest('svg, style, script') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent?.toLowerCase() ?? '';
+    for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + needle.length)) {
+      const range = document.createRange(); range.setStart(node, at); range.setEnd(node, at + needle.length); ranges.push(range);
+    }
+  }
+  return ranges;
+}
+export function useRangeHighlights(ranges: Range[], current: number) {
+  useEffect(() => {
+    const highlights = (CSS as unknown as { highlights?: Map<string, unknown> }).highlights;
+    if (!highlights || typeof Highlight === 'undefined' || !ranges.length) return;
+    highlights.set('pr-find', new Highlight(...ranges.filter((_, index) => index !== current)));
+    highlights.set('pr-find-current', new Highlight(...ranges.slice(current, current + 1)));
+    return () => { highlights.delete('pr-find'); highlights.delete('pr-find-current'); };
+  }, [ranges, current]);
+}
+// Centers a match below the sticky bars once it is laid out; a match in a card that is unfolding takes a frame or two.
+export function scrollToRange(range: Range, offset: number) {
+  let frame = 0, frames = 0, settled = 0;
+  const step = () => {
+    const box = range.getClientRects()[0];
+    if (box) {
+      const delta = box.top + box.height / 2 - (window.innerHeight + offset) / 2;
+      if (Math.abs(delta) > 1) { scrollPageBy(delta); settled = 0; } else settled++;
+    }
+    if (settled < 3 && ++frames < 30) frame = requestAnimationFrame(step);
+  };
+  step();
+  return () => cancelAnimationFrame(frame);
+}
+
+export function FindBar({ query, onQuery, count, current, onStep, onClose, focusKey, label = 'Find in diff' }: { query: string; onQuery: (query: string) => void; count: number; current: number; onStep: (direction: 1 | -1) => void; onClose: () => void; focusKey: number; label?: string }) {
   const input = useRef<HTMLInputElement>(null);
   // Pressing ⌘F again re-focuses and selects the query.
   useEffect(() => { input.current?.focus(); input.current?.select(); }, [focusKey]);
   return <div className="find-bar" role="search">
     <InputGroup className="h-8 bg-card">
-      <InputGroupInput ref={input} value={query} onChange={event => onQuery(event.target.value)} placeholder="Find in diff" aria-label="Find in diff" spellCheck={false}
+      <InputGroupInput ref={input} value={query} onChange={event => onQuery(event.target.value)} placeholder={label} aria-label={label} spellCheck={false}
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); onStep(event.shiftKey ? -1 : 1); } if (event.key === 'Escape') { event.preventDefault(); onClose(); } }} />
       <InputGroupAddon align="inline-end" className="find-count">{query ? (count ? `${current + 1} of ${count}` : 'No results') : ''}</InputGroupAddon>
     </InputGroup>

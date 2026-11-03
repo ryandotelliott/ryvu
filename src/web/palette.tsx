@@ -106,7 +106,7 @@ export function CommandPalette({ open, onOpenChange, settings }: { open: boolean
     event.preventDefault(); openPull(item.kind === 'pull' ? item.pull : item.target, event.metaKey || event.ctrlKey ? 'github' : 'guide');
   }
   return <CommandDialog open={open} onOpenChange={onOpenChange} title="Find a pull request" description="Search pull requests, or paste a link or number" className="top-[12vh] sm:max-w-[640px]">
-    <Command shouldFilter={false} value={value} onValueChange={setValue} onKeyDown={onKeyDown} className="p-0">
+    <Command shouldFilter={false} value={value} onValueChange={setValue} onKeyDown={onKeyDown} className="p-0 **:data-[slot=command-input-wrapper]:px-2 **:data-[slot=command-input-wrapper]:pt-2">
       <CommandInput autoFocus value={query} onValueChange={setQuery} placeholder="Search pull requests, or paste a link or number" spellCheck={false} autoComplete="off" className={reference ? 'font-mono text-[13px]' : ''} />
       <CommandList className="max-h-[min(60vh,520px)] p-1">
         {groups.map((group, g) => (group.items.length > 0 || group.note) && <CommandGroup key={g} heading={<span className="flex items-center justify-between gap-2"><span className="inline-flex items-center gap-1">{group.label}</span>{group.meta && <span>{group.meta}</span>}</span>}>

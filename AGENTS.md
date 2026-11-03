@@ -24,6 +24,7 @@ Use `Tip` from `src/web/ui.tsx`, never the `title` attribute.
 - `command.tsx` matches the selected row with `data-[selected=true]:` because cmdk writes `data-selected="false"` on every other row; keep that edit if the component is re-added.
 - `tooltip.tsx` fits the available viewport width and is restyled light (popover colours, a ring and shadow, no arrow), and `kbd.tsx` drops the base-layer `kbd` border inside tooltips; keep both edits if either is re-added.
 - `sidebar.tsx` adds a resizable rail and remembers its width; preserve those edits if it is re-added.
+- Primitives have no focus or invalid rings (`ring-3`, `ring-[3px]`, `focus-visible:ring-*`, `aria-invalid:ring-*`): bordered controls show focus with `focus-visible:border-ring`, and borderless ones (sidebar items, toggles) with a 1px outline. Strip the rings from any newly added or re-added component. The `ring-1 ring-foreground/10` hairline on popovers, dialogs and tooltips is a border and stays.
 - New shadcn files sometimes import `cn` from `"cn"`; change it to `@/lib/utils`.
 
 ### Styling
