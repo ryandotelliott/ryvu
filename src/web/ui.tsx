@@ -1,5 +1,5 @@
 import { Component, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
+import { Check, CircleAlert, Copy, LoaderCircle } from 'lucide-react';
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 import { Radio } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
@@ -64,6 +64,19 @@ export function Tip({ content, hotkey, delay = 'short', side = 'top', children }
     <TooltipTrigger delay={tipDelays[delay]} render={children} />
     <TooltipContent side={side}><TooltipText>{content}</TooltipText>{hotkey && <Kbd className="shrink-0">{hotkey}</Kbd>}</TooltipContent>
   </Tooltip>;
+}
+
+// An icon button that copies `text`, then shows a check for a moment. `label` is the tooltip.
+export function CopyButton({ text, label, className }: { text: string; label: string; className?: string }) {
+  const [copied, setCopied] = useState(false), reset = useRef(0);
+  useEffect(() => () => clearTimeout(reset.current), []);
+  async function copy() {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    clearTimeout(reset.current);
+    reset.current = window.setTimeout(() => setCopied(false), 1500);
+  }
+  return <Tip content={copied ? 'Copied' : label}><Button variant="ghost" size="icon-xs" className={className} aria-label={copied ? 'Copied' : `${label}: ${text}`} onClick={copy}>{copied ? <Check /> : <Copy />}</Button></Tip>;
 }
 
 export function Segmented<T extends string>({ value, options, onChange, label, size = 'sm' }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (value: T) => void; label: string; size?: 'sm' | 'md' }) {

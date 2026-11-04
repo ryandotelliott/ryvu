@@ -11,7 +11,7 @@ import { Annotation, FileComments, type AnnotationData, type CommentData } from 
 import { pullLink } from './links';
 import { hideWhitespace, lineHeightFor, type DisplaySettings } from './display';
 import { codeTheme as theme, commentAnchor, DiffSourceContext, diffPositions, fileAnchor, pageVirtualizer, scrollPageBy, splitPath, useReview } from './pull-page';
-import { ErrorBoundary, Tip } from './ui';
+import { CopyButton, ErrorBoundary, Tip } from './ui';
 import { readFile } from '../pull.functions';
 import type { ChangedFile, DraftComment, CommentThread, RangePull } from '../types';
 
@@ -107,7 +107,11 @@ export const DiffCard = memo(function DiffCard({ file, pulls, open, viewed, onTo
   const commentOnFile = review && (() => { review.setComposer({ path: file.path, file: true }); if (!open) onToggle(file.path); });
   return <article className={`diff-card ${open ? 'expanded' : ''} ${viewed ? 'is-read' : ''}`} id={fileAnchor(file.path)}>
     <div ref={heading} className="file-heading">
-      <button type="button" className="file-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} ${file.path}`} aria-expanded={open} onClick={() => { anchorCollapse(); onToggle(file.path); }}><ChevronRight size={13} className="chevron" /><span className="filename">{name}</span><span className="directory">{directory}</span><FileStatus file={file} /></button>
+      <div className="file-title">
+        <button type="button" className="file-toggle" aria-label={`${open ? 'Collapse' : 'Expand'} ${file.path}`} aria-expanded={open} onClick={() => { anchorCollapse(); onToggle(file.path); }}><ChevronRight size={13} className="chevron" /><span className="filename">{name}</span><span className="directory">{directory}</span></button>
+        <CopyButton text={file.path} label="Copy path" className="text-muted-foreground" />
+        <FileStatus file={file} />
+      </div>
       {source && pulls && pulls.length > 0 && <span className="file-pulls">{pulls.map(pull => <Tip key={pull.number} content={`Open this file in #${pull.number}: ${pull.title}`} delay="long"><Link {...pullLink(source.repo, pull.number, 'diff')} hash={fileAnchor(file.path)} className="file-pull">#{pull.number}</Link></Tip>)}</span>}
       {commentCount > 0 && <Tip content={`${commentCount} comment ${commentCount === 1 ? 'thread' : 'threads'}`}><span className="comment-count"><MessageSquare size={12} />{commentCount}</span></Tip>}
       {/\.(md|markdown|mdown|mkd)$/i.test(file.path) && <Tip content={preview ? 'Show diff' : 'Preview Markdown'}><Button variant="ghost" size="icon-sm" aria-label={preview ? 'Show diff' : 'Preview Markdown'} aria-pressed={preview} onClick={() => { onPreview(file.path, !preview); if (!open) onToggle(file.path); }}>{preview ? <Code2 /> : <Eye />}</Button></Tip>}
