@@ -25,6 +25,14 @@ export const getRange = createServerFn({ method: 'GET' })
   })
   .handler(({ data }) => { const { service, inbox } = runtime(); return service.range(data.pull, data.through, inbox.login(), new AbortController().signal); });
 
+export const getCommit = createServerFn({ method: 'GET' })
+  .validator((input: PullRef & { commit: string }) => {
+    const raw = fields(input), pull = pullFrom(raw);
+    if (!isHeadSHA(raw.commit)) throw new UserError('Invalid commit.', 400);
+    return { pull, commit: raw.commit };
+  })
+  .handler(({ data }) => { const { service, inbox } = runtime(); return service.commit(data.pull, data.commit, inbox.login(), new AbortController().signal); });
+
 export const readFile = createServerFn({ method: 'GET' })
   .validator((input: { repo: string; sha: string; path: string }) => {
     const raw = fields(input), [owner, repo] = parseRepo(raw.repo).split('/');

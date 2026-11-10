@@ -6,9 +6,10 @@ const text = (value: unknown) => typeof value === 'string' && value.length > 0 &
 export const Route = createFileRoute('/pr/$owner/$repo/$number/{-$view}')({
   // `through` names a second PR of the same stack; the page then shows every PR between the two as one diff.
   // `branch` and `path` pick the branch and file on Files.
-  validateSearch: (search: Record<string, unknown>): { analyze?: 1; through?: number } & FileSearch => ({
+  validateSearch: (search: Record<string, unknown>): { analyze?: 1; through?: number; commit?: string } & FileSearch => ({
     ...(String(search.analyze) === '1' ? { analyze: 1 as const } : {}),
     ...(/^[1-9][0-9]{0,9}$/.test(String(search.through)) ? { through: Number(search.through) } : {}),
+    ...(typeof search.commit === 'string' && /^[a-f0-9]{40}$/.test(search.commit) ? { commit: search.commit } : {}),
     ...(text(search.branch) ? { branch: text(search.branch) } : {}),
     ...(text(search.path) ? { path: text(search.path) } : {})
   }),
@@ -18,6 +19,7 @@ export const Route = createFileRoute('/pr/$owner/$repo/$number/{-$view}')({
 function Pull() {
   const target = pullTarget(Route.useParams(), Route.useSearch());
   if (!target) return <Navigate to="/" replace />;
+  if (target.commit && target.view !== 'diff' && target.view !== 'files') return <Navigate {...pullLink(target.repo, target.number, 'diff', { commit: target.commit })} replace />;
   // A range has no guide, so its Guide link leads to the combined diff.
   if (target.through && target.view === 'guide') return <Navigate {...pullLink(target.repo, target.number, 'diff', { through: target.through })} replace />;
   return <PullPage target={target} />;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps,
 import { Link, useNavigate } from '@tanstack/react-router';
 import type { SelectedLineRange } from '@pierre/diffs';
 import { Check, ChevronRight, CircleX, Clock, Eye, EyeOff, FileCode2, GitBranch, ListChecks, LoaderCircle, MessageSquare, RotateCw, Search, SlidersHorizontal, Users, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
@@ -29,7 +29,7 @@ import { fileAnchor, pullBranches, ReviewContext, scrollPageBy, splitPath } from
 import { FileViewer, RepoFiles } from './files-view';
 import { RangeOverview } from './range';
 import { Description } from './description';
-import type { ChangedFile, Chapter, PullDetail, RangePull, ReviewEvent, Snapshot } from '../types';
+import type { ChangedFile, Chapter, PullCommit, PullDetail, RangePull, ReviewEvent, Snapshot } from '../types';
 
 // Heights of the sticky top bar and the diff toolbar, so scrolled-to content lands below them.
 const topbar = 48, toolbar = 44;
@@ -72,14 +72,16 @@ function seekComment(anchor: string, fileId: string, offset: number) {
 // With `through`, `detail` is a range: several PRs of one stack read as one diff, with no guide and no comments.
 // On Files, `browsing` is the branch (null for the default branch) and file shown.
 export function PullView({ detail, onDetail, view, through, browsing, navigation, status, analyzing, onAnalyze }: { detail: PullDetail; onDetail: (update: (detail: PullDetail) => PullDetail) => void; view: PullViewName; through: number | null; browsing: { branch: string | null; path: string | null }; navigation: ComponentProps<typeof AppSidebar>; status: ReactNode; analyzing: boolean; onAnalyze: (fresh: boolean) => void }) {
-  const { snapshot, guide: review, conversation, drafts, range } = detail, guide = review?.guide ?? null;
+  const { snapshot, guide: review, conversation, drafts, comparison } = detail, guide = review?.guide ?? null;
+  const range = comparison.kind === 'range' ? comparison.pulls : null, commit = comparison.kind === 'commit' ? comparison.commit : null;
+  const commitSHA = commit?.sha ?? null;
   const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`, number = snapshot.identity.number, pullKey = `${repo.toLowerCase()}#${number}`;
   const [display, setDisplay, resetDisplay] = useDisplay(), navigate = useNavigate();
   const { isMobile, open: sidebarOpen, openMobile, setOpen: setSidebarOpen, setOpenMobile } = useSidebar();
   const sidebarVisible = isMobile ? openMobile : sidebarOpen;
   // A range keeps its own reviewed files; a file's diff in a range differs from its diff in any one PR.
-  const viewedKey = `pr-guide:viewed:${range ? `${repo.toLowerCase()}#${range[range.length - 1].number}..${range[0].number}` : pullKey}@${snapshot.headSHA}`;
-  const link = (target: PullViewName) => pullLink(repo, number, target, { through });
+  const viewedKey = `pr-guide:viewed:${range ? `${repo.toLowerCase()}#${range[range.length - 1].number}..${range[0].number}` : commit ? `${pullKey}:commit` : pullKey}@${snapshot.headSHA}`;
+  const link = (target: PullViewName) => pullLink(repo, number, target, { through, commit: commitSHA });
   // Files matching a hidden pattern stay out of the Diff page's list, diffs and totals.
   const hidden = useHiddenFiles(repo), patterns = hidden.enabled ? hidden.patterns : [];
   const shown = useMemo(() => snapshot.files.filter(file => !patterns.some(pattern => matchesPattern(pattern, file.path))), [snapshot.files, patterns.join('\n')]);
@@ -163,13 +165,13 @@ export function PullView({ detail, onDetail, view, through, browsing, navigation
   // Files opens a branch at a file; it keeps the other when only one changes.
   const browse = useCallback((next: { branch?: string | null; path?: string | null }) => {
     if (isMobile && next.path) setOpenMobile(false);
-    void navigate(pullLink(repo, number, 'files', { through, branch: next.branch === undefined ? browsing.branch : next.branch, path: next.path === undefined ? browsing.path : next.path }));
-  }, [repo, number, through, browsing.branch, browsing.path, isMobile]);
+    void navigate(pullLink(repo, number, 'files', { through, commit: commitSHA, branch: next.branch === undefined ? browsing.branch : next.branch, path: next.path === undefined ? browsing.path : next.path }));
+  }, [repo, number, through, commitSHA, browsing.branch, browsing.path, isMobile]);
   // A changed file before or after the change: at the PR's base for the old file, at its head for the new one.
   const openFile = useCallback((file: ChangedFile, version: 'old' | 'new') => {
     const sides = pullBranches(snapshot);
-    void navigate(pullLink(repo, number, 'files', { through, branch: version === 'old' ? sides.base : sides.head, path: version === 'old' ? file.previousPath ?? file.path : file.path }));
-  }, [repo, number, through, snapshot]);
+    void navigate(pullLink(repo, number, 'files', { through, commit: commitSHA, branch: version === 'old' ? sides.base : sides.head, path: version === 'old' ? file.previousPath ?? file.path : file.path }));
+  }, [repo, number, through, commitSHA, snapshot]);
   // The overview and Files have no diffs; picking a file there opens it in Diff.
   function pickFile(path: string) {
     const targetView = view === 'guide' && chapters.some(chapter => chapter.files.includes(path)) ? 'guide' : 'diff';
@@ -317,12 +319,12 @@ export function PullView({ detail, onDetail, view, through, browsing, navigation
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   });
   const displayMenu = <DisplayMenu positionMethod={view === 'diff' ? 'fixed' : undefined} display={display} onChange={setDisplay} onReset={resetDisplay} onExpand={() => setOpen(previous => ({ ...previous, [diffView]: pageFiles }))} onCollapse={() => setOpen(previous => ({ ...previous, [diffView]: [] }))} />;
-  const heading = <PullHeading snapshot={snapshot} />;
+  const heading = commit ? <CommitHeading snapshot={snapshot} commit={commit} /> : <PullHeading snapshot={snapshot} />;
   const searchLabel = overviewComments ? 'Filter comments' : 'Search files';
   const searchButton = (className?: string) => <Tip content={searchLabel} hotkey="/" side="bottom"><SidebarGroupAction ref={filterButton} className={className} aria-label={searchLabel} aria-expanded={filterOpen} onClick={() => filterOpen ? closeFileSearch() : searchFiles()}><Search /></SidebarGroupAction></Tip>;
   const filterField = filterOpen && <div className="pb-2"><InputGroup className="bg-card"><InputGroupAddon><Search /></InputGroupAddon><InputGroupInput ref={filterInput} value={filter} onChange={e => setFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); closeFileSearch(); } }} placeholder={overviewComments ? 'Filter comments' : 'Filter files'} aria-label={overviewComments ? 'Filter comments' : 'Filter files'} spellCheck={false} /><InputGroupAddon align="inline-end"><Kbd>/</Kbd></InputGroupAddon></InputGroup></div>;
-  return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={range ? null : reviewApi}>
-    <ReviewLayout navigation={navigation} repo={repo} number={number} through={through} title={snapshot.title} stack={detail.stack} view={view} analyzing={analyzing}
+  return <DiffProvider source={{ repo, base: snapshot.baseSHA, head: snapshot.headSHA }}><ReviewContext.Provider value={range || commit ? null : reviewApi}>
+    <ReviewLayout navigation={navigation} repo={repo} number={number} through={through} commit={commitSHA} title={snapshot.title} stack={detail.stack} view={view} analyzing={analyzing}
       sidebarFooter={view !== 'files' && !overviewComments && filteredCount > 0 && <Tip content={hidden.enabled ? 'Show them' : 'Hide them'} delay="long"><Button variant="ghost" size="xs" className="min-w-0 flex-1 justify-start text-muted-foreground" onClick={() => hidden.setEnabled(!hidden.enabled)}>{hidden.enabled ? <EyeOff /> : <Eye />}<span className="truncate">{filteredCount} filtered {filteredCount === 1 ? 'file' : 'files'} {hidden.enabled ? 'hidden' : 'visible'}</span></Button></Tip>}
       sidebar={view === 'files' ? <RepoFiles snapshot={snapshot} branch={browsing.branch} path={browsing.path} filter={filter} search={searchButton()} field={filterField} onBranch={branch => browse({ branch })} onPick={path => browse({ path })} /> :
       overviewComments ? <SidebarGroup className="comment-sidebar min-h-0 flex-1" aria-label="Comments">
@@ -342,10 +344,10 @@ export function PullView({ detail, onDetail, view, through, browsing, navigation
         {!changedFiles.length && <p className="outline-empty">{filter ? `No files match “${filter}”.` : 'Every file is hidden.'}</p>}
       </SidebarGroup>
       }
-      actions={!range && <ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />}
+      actions={!range && !commit && <ReviewMenu pullKey={pullKey} drafts={drafts} isAuthor={Boolean(detail.viewer) && detail.viewer === snapshot.author} onSubmit={submitReview} onShowDrafts={showDrafts} />}
     >
     {view === 'overview' ? range ? <RangeOverview repo={repo} pulls={range} /> : <OverviewView detail={detail} heading={heading} mainRef={overviewMain} descriptionOpen={descriptionOpen} onDescriptionOpen={setDescriptionOpen}
-        activity={<Activity entries={entries} isOpen={isCardOpen} onOpenChange={setCardOpen} display={activityDisplay} onDisplay={changeActivityDisplay} onFile={pickFile} pullUrl={`https://github.com/${repo}/pull/${number}`} />} />
+        activity={<Activity entries={entries} isOpen={isCardOpen} onOpenChange={setCardOpen} display={activityDisplay} onDisplay={changeActivityDisplay} onFile={pickFile} repo={repo} number={number} />} />
       : view === 'files' ? <FileViewer snapshot={snapshot} branch={browsing.branch} path={browsing.path} display={display} offset={offset} onBranch={branch => browse({ branch })} onShowDiff={pickFile} />
       : view === 'guide' ? <div className="guide-page">
         <div className="guide-head">
@@ -373,6 +375,7 @@ export function PullView({ detail, onDetail, view, through, browsing, navigation
           <span className="toolbar-actions"><span className="toolbar-progress">{linesLeft.toLocaleString()} {linesLeft === 1 ? 'line' : 'lines'} left</span>{displayMenu}</span>
         </div>
         <div className="diff-body">
+          {commit && !snapshot.files.length && <p className="outline-empty">This commit has no file changes.</p>}
           <div className="diff-panel">{shown.map(file => <DiffCard key={file.path} file={file} pulls={touched.get(file.path)} open={open.diff.includes(file.path)} viewed={viewed.includes(file.path)} onToggle={toggle} onViewed={markViewed} display={display} selectedLines={selected.diff?.path === file.path ? selected.diff.range : null} onSelectionChange={selectLines} preview={previewed.includes(file.path)} onPreview={setFilePreview} onOpenFile={openFile} />)}</div>
         </div>
       </div>}
@@ -380,6 +383,17 @@ export function PullView({ detail, onDetail, view, through, browsing, navigation
       onClose={() => setFind(previous => ({ ...previous, open: false }))} focusKey={find.focus} label={overviewComments ? 'Find in conversation' : 'Find in diff'} />}
     {toast && <Toast message={toast} onDone={() => setToast('')} />}
     </ReviewLayout></ReviewContext.Provider></DiffProvider>;
+}
+
+function CommitHeading({ snapshot, commit }: { snapshot: Snapshot; commit: PullCommit }) {
+  const repo = `${snapshot.identity.owner}/${snapshot.identity.repo}`;
+  return <header className="pr-heading commit-heading">
+    <div className="commit-context"><span>Commit <code>{commit.sha.slice(0, 7)}</code></span><Link {...pullLink(repo, snapshot.identity.number, 'diff')} className={buttonVariants({ variant: 'outline', size: 'xs' })}>All changes</Link></div>
+    <h1>{commit.message}</h1>
+    <div className="review-meta"><Avatar login={commit.author} size={18} /><span className="author">{commit.author}</span><span className="meta-separator">·</span>
+      <Tip content={`${snapshot.baseSHA} → ${commit.sha}`} delay="long"><span>Changes against <code>{snapshot.baseSHA.slice(0, 7)}</code></span></Tip>
+    </div>
+  </header>;
 }
 
 function PullHeading({ snapshot }: { snapshot: Snapshot }) {

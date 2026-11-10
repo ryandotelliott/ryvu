@@ -97,7 +97,7 @@ test('analysis saves concrete references and existing cached guides remain reada
     fetch: async () => snapshot,
     generate: (snapshot, signal, ignored) => generateGuide(snapshot, signal, ignored, schemaFollowingModel),
     conversation: async () => ({ threads: [], reviews: [], comments: [] }), status: async () => { throw new Error('not used'); }, stack: async () => null,
-    compare: async () => { throw new Error('not used'); }
+    compare: async () => { throw new Error('not used'); }, commit: async () => { throw new Error('not used'); }
   };
   try {
     const service = new ReviewService(store, deps);

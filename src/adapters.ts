@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { MODEL, normalizeFile, UserError } from './domain.js';
 import { guideGeneration } from './guide-generation.js';
 import { runCommand, type Runner } from './process.js';
-import type { ChangedFile, Guide, PRIdentity, Snapshot } from './types.js';
+import type { ChangedFile, Guide, PRIdentity, PullCommit, Snapshot } from './types.js';
 function metadata(value: unknown): Record<string, any> {
   if (!value || typeof value !== 'object') throw new UserError('GitHub returned invalid PR metadata.');
   const d = value as Record<string, any>;
@@ -43,6 +43,31 @@ export async function fetchCompare(identity: PRIdentity, base: string, head: str
   const diff = await compareCommits(identity.owner, identity.repo, base, head, signal, runner);
   if (diff.files.length >= 300) throw new UserError('Together these pull requests change more than 300 files, more than GitHub can compare at once. Review fewer of them together.');
   return diff;
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+const isSHA = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
+// GitHub's commit diff is against its first parent. Root commits add their files to Git's empty tree.
+export async function fetchCommit(identity: PRIdentity, sha: string, signal: AbortSignal, runner: Runner = runCommand): Promise<{ commit: PullCommit; baseSHA: string; files: ChangedFile[] }> {
+  if (!isSHA(sha)) throw new UserError('Invalid commit.', 400);
+  const pages: unknown = JSON.parse(await runner('gh', ['api', `repos/${identity.owner}/${identity.repo}/commits/${sha}?per_page=100`, '--paginate', '--slurp'], { signal, maxBytes: 20_000_000 }));
+  if (!Array.isArray(pages) || !pages.length) throw new UserError('GitHub returned an invalid commit.');
+  const first: unknown = pages[0];
+  if (!isObject(first) || first.sha !== sha || !Array.isArray(first.parents) || !isObject(first.commit) || typeof first.commit.message !== 'string') throw new UserError('GitHub returned an invalid commit.');
+  const parent: unknown = first.parents[0];
+  if (first.parents.length && (!isObject(parent) || !isSHA(parent.sha))) throw new UserError('GitHub did not return a valid parent commit.');
+  const baseSHA = isObject(parent) && isSHA(parent.sha) ? parent.sha : '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+  const files = pages.flatMap((page: unknown) => {
+    if (!isObject(page) || page.sha !== sha || !Array.isArray(page.files)) throw new UserError('GitHub returned invalid commit file pages.');
+    return page.files.map(normalizeFile);
+  });
+  if (files.length >= 3000) throw new UserError('This commit reaches GitHub’s limit of 3,000 changed files. Open it on GitHub to review it.');
+  const message = first.commit.message;
+  const author = isObject(first.author) ? first.author.login : null, details = first.commit;
+  const name = isObject(details.author) ? details.author.name : null, at = isObject(details.committer) ? details.committer.date : null;
+  const commit: PullCommit = { sha, message: message.split('\n')[0], author: typeof author === 'string' ? author : typeof name === 'string' ? name : 'unknown', at: typeof at === 'string' ? at : '' };
+  signal.throwIfAborted();
+  return { commit, baseSHA, files };
 }
 // The model only receives supplied data: user config, hooks, connectors, browser,
 // shell, code mode, agents, memory and image tools are disabled for this process.

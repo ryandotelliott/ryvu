@@ -39,8 +39,8 @@ export type StackedPull = { number: number; title: string; state: 'open' | 'clos
 export type PullStack = { base: string; pulls: StackedPull[] };
 // One PR of a range reviewed together, with the paths it changed (old paths of renames included).
 export type RangePull = StackedPull & { author: string; body: string; baseRef: string; headRef: string; files: string[] };
-// `range` is set when the page shows several PRs of one stack as one diff. It runs top first, like `PullStack.pulls`.
-export type PullDetail = { snapshot: Snapshot; guide: Review | null; prior: PriorGuide | null; conversation: Conversation; drafts: DraftComment[]; viewer: string; status: PullStatus | null; stack: PullStack | null; range: RangePull[] | null };
+export type PullComparison = { kind: 'pull' } | { kind: 'range'; pulls: RangePull[] } | { kind: 'commit'; commit: PullCommit };
+export type PullDetail = { snapshot: Snapshot; guide: Review | null; prior: PriorGuide | null; conversation: Conversation; drafts: DraftComment[]; viewer: string; status: PullStatus | null; stack: PullStack | null; comparison: PullComparison };
 // A repository's branches for the Files view: the default branch, then the most recently committed ones.
 export type Branch = { name: string; sha: string };
 export type BranchList = { defaultBranch: Branch | null; branches: Branch[] };

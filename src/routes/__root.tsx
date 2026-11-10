@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import { ClientOnly, createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Application } from '../web/app';
 import style from '../web/style.css?url';
@@ -9,7 +9,7 @@ const icon = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 v
 export const Route = createRootRoute({
   head: () => ({ meta: [{ title: 'PR Guide' }], links: [{ rel: 'icon', href: icon }, { rel: 'stylesheet', href: style }] }),
   shellComponent: Document,
-  component: () => <TooltipProvider><Application><Outlet /></Application></TooltipProvider>
+  component: () => <TooltipProvider><Application><ClientOnly><Outlet /></ClientOnly></Application></TooltipProvider>
 });
 
 // The theme colors are written here because head() keeps only one meta tag per name.

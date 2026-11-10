@@ -4,7 +4,7 @@ import { ArrowLeft, ExternalLink, RotateCw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { listPulls, openSession } from '../inbox.functions';
 import { cancelAnalysis, getAnalysis, startAnalysis } from '../jobs.functions';
-import { getPull, getRange } from '../pull.functions';
+import { getCommit, getPull, getRange } from '../pull.functions';
 import { setSessionToken } from '../session';
 import { AppContext, useApplication } from './application-context';
 import { recall, remember } from './browser-state';
@@ -44,12 +44,13 @@ function useAppState() {
     const version = ++loadSequence.current, previous = pulls[next.key];
     setLoadError('');
     try {
-      const detail = next.through ? await getRange({ data: { repo: next.repo, number: next.number, through: next.through } }) : await getPull({ data: { repo: next.repo, number: next.number } });
+      const ref = { repo: next.repo, number: next.number };
+      const detail = next.commit ? await getCommit({ data: { ...ref, commit: next.commit } }) : next.through ? await getRange({ data: { ...ref, through: next.through } }) : await getPull({ data: ref });
       if (version === loadSequence.current) {
         remember([
           ...(detail.stack?.pulls ?? []).map(pull => ({ repo: next.repo, number: pull.number, title: pull.title, state: pull.state, isDraft: pull.draft, additions: pull.additions, deletions: pull.deletions, stack: detail.stack })),
           // A range's snapshot is the combined diff, not this PR's, so only the stack rows describe its PRs.
-          ...(detail.range ? [] : [{ repo: next.repo, number: next.number, title: detail.snapshot.title, author: detail.snapshot.author, state: detail.snapshot.state, isDraft: detail.snapshot.draft, stack: detail.stack }])
+          ...(detail.comparison.kind === 'range' ? [] : [{ repo: next.repo, number: next.number, title: detail.snapshot.title, author: detail.snapshot.author, state: detail.snapshot.state, isDraft: detail.snapshot.draft, stack: detail.stack }])
         ]);
         setPulls(current => ({ ...current, [next.key]: current[next.key] === previous ? detail : current[next.key] }));
         setConfirmedPull({ key: next.key, version });
@@ -114,14 +115,18 @@ export function PullPage({ target }: { target: PullTarget }) {
     void navigate({ ...pullLink(target.repo, target.number, 'guide'), replace: true });
     if (!shown.guide && !(app.analyzing && app.jobKey === target.key)) void app.analyze(target, false, shown.snapshot.files.map(file => file.path));
   }, [target.key, target.analyze, Boolean(shown), app.confirmedPull]);
-  useEffect(() => { document.title = shown ? `${shown.range ? rangeLabel(shown.range) : shown.snapshot.title} · PR Guide` : 'Loading · PR Guide'; }, [shown, target.key]);
+  useEffect(() => {
+    const comparison = shown?.comparison;
+    const title = comparison?.kind === 'commit' ? `${comparison.commit.sha.slice(0, 7)}: ${comparison.commit.message}` : comparison?.kind === 'range' ? rangeLabel(comparison.pulls) : shown?.snapshot.title ?? 'Loading';
+    document.title = `${title} · PR Guide`;
+  }, [shown, target.key]);
   const forThis = app.jobKey === target.key;
   const navigation = { settings: app.settings, repoCounts: app.repoCounts, onSearch: app.openPalette };
   const preparing = <Preparing target={target} navigation={navigation} error={app.loadError} onRetry={() => void app.load(target)} />;
   if (!shown) return preparing;
   const status = forThis && (app.analyzing || app.jobError || app.job?.state === 'cancelled') ? <StatusBox key={app.epoch.current} job={app.job} error={app.jobError} canCancel={Boolean(app.currentJob.current)} onCancel={() => void app.cancel()} /> : null;
   return <Suspense fallback={preparing}>
-    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} through={target.through} browsing={{ branch: target.branch, path: target.path }} navigation={navigation} status={status} analyzing={forThis && app.analyzing}
+    <PullView key={`${target.key}@${shown.snapshot.headSHA}:${shown.guide?.key ?? ''}`} detail={shown} view={target.view} through={target.through} browsing={{ branch: target.branch ?? target.commit, path: target.path }} navigation={navigation} status={status} analyzing={forThis && app.analyzing}
       onDetail={update => app.setPulls(current => current[target.key] ? { ...current, [target.key]: update(current[target.key]) } : current)}
       onAnalyze={fresh => void app.analyze(target, fresh, shown.snapshot.files.map(file => file.path))} />
   </Suspense>;

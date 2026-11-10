@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Check, ChevronRight, FileCode2, GitCommitHorizontal, GitPullRequest, MessageSquare, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -8,6 +9,7 @@ import { ThreadView } from './comments';
 import { cardId, type ActivityCard, type ActivityEntry } from './activity-items';
 import { contains } from './fuzzy';
 import { Markdown } from './markdown';
+import { pullLink } from './links';
 import { splitPath } from './pull-page';
 import { Avatar, focusOnKeyboardOpen, Segmented, Switch, Tip } from './ui';
 import type { ActivityDisplay, Visibility } from './display';
@@ -61,14 +63,14 @@ function ActivityCardView({ card, open, onOpenChange, now, onFile }: { card: Act
 }
 
 // The PR's activity. Messages are cards with a folding header; reviews without a summary, the opening and commits are single lines.
-export function Activity({ entries, isOpen, onOpenChange, display, onDisplay, onFile, pullUrl }: { entries: ActivityEntry[]; isOpen: (card: ActivityCard) => boolean; onOpenChange: (key: string, open: boolean) => void; display: ActivityDisplay; onDisplay: (patch: Partial<ActivityDisplay>) => void; onFile: (path: string) => void; pullUrl: string }) {
+export function Activity({ entries, isOpen, onOpenChange, display, onDisplay, onFile, repo, number }: { entries: ActivityEntry[]; isOpen: (card: ActivityCard) => boolean; onOpenChange: (key: string, open: boolean) => void; display: ActivityDisplay; onDisplay: (patch: Partial<ActivityDisplay>) => void; onFile: (path: string) => void; repo: string; number: number }) {
   const now = useNow();
   return <section className="activity" aria-label="Activity">
     <div className="activity-bar"><h3>Activity</h3><ActivityDisplayMenu display={display} onChange={onDisplay} /></div>
     {entries.map(entry => <div key={entry.key} className="activity-item">{
       entry.type === 'opened' ? <ActivityEvent icon={<GitPullRequest size={14} className="text-(--success)" />} at={entry.at} now={now}><strong>{entry.author}</strong> opened this pull request{entry.commits ? ` with ${entry.commits} ${entry.commits === 1 ? 'commit' : 'commits'}` : ''}</ActivityEvent>
       : entry.type === 'event' ? <ReviewEvent review={entry.review} now={now} />
-      : entry.type === 'commit' ? <ActivityEvent icon={<GitCommitHorizontal size={14} />} at={entry.at} now={now}><strong>{entry.commit.author}</strong> pushed <a className="commit-sha" href={`${pullUrl}/commits/${entry.commit.sha}`} target="_blank" rel="noreferrer">{entry.commit.sha.slice(0, 7)}</a> <span className="commit-message">{entry.commit.message}</span></ActivityEvent>
+      : entry.type === 'commit' ? <ActivityEvent icon={<GitCommitHorizontal size={14} />} at={entry.at} now={now}><strong>{entry.commit.author}</strong> pushed <Tip content="View changes in this commit" delay="long"><Link {...pullLink(repo, number, 'diff', { commit: entry.commit.sha })} className="activity-commit"><code className="commit-sha">{entry.commit.sha.slice(0, 7)}</code> <span className="commit-message">{entry.commit.message}</span></Link></Tip></ActivityEvent>
       : <ActivityCardView card={entry} open={isOpen(entry)} onOpenChange={open => onOpenChange(entry.key, open)} now={now} onFile={onFile} />
     }</div>)}
   </section>;

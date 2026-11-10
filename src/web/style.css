@@ -212,6 +212,8 @@ button.stack-dot:hover::before { border-color: var(--foreground); box-shadow: 0 
 .activity-card-body { padding: 12px 16px 14px; } .activity-card-body[hidden] { padding: 0; }
 .activity-file { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin-bottom: 10px; padding: 0; border: 0; background: none; font: 11.5px var(--mono); color: var(--text-3); text-align: left; overflow-wrap: anywhere; } .activity-file:hover { color: var(--foreground); text-decoration: underline; } .activity-file > svg { flex-shrink: 0; }
 .commit-sha { font: 11.5px var(--mono); color: var(--text-2); text-decoration: none; } .commit-sha:hover { text-decoration: underline; } .commit-message { color: var(--text-2); }
+.activity-commit { text-decoration: none; } .activity-commit:hover .commit-message { text-decoration: underline; text-underline-offset: 2px; }
+.commit-context { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: var(--text-3); font-size: 12px; }
 .tag { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; padding: 0 7px; border: 1px solid var(--border); border-radius: 99px; font: 500 11px/18px var(--font-sans); color: var(--text-3); white-space: nowrap; }
 .review-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 99px; background: var(--muted); font-size: 11.5px; color: var(--muted-foreground); } .review-chip.approved { background: var(--success-soft); color: var(--success); } .review-chip.changes { background: var(--removed-soft); color: var(--removed); }
 
